@@ -99,6 +99,11 @@ The system is a **peer-to-peer** application: there is no central server. Each i
 - **FR-PR-6 [REC]** Each profile **should** support an **ignore-pattern list** (e.g. glob patterns, default ignores for temp/system files such as `~$*`, `.DS_Store`, `Thumbs.db`, `desktop.ini`) to avoid syncing junk.
 - **FR-PR-7** A profile **shall** be runnable on demand (manual trigger) in MVP.
 - **FR-PR-8 [REC]** Profiles **should** later support automatic triggers: on filesystem change (watch) and/or on a schedule/interval (Phase 2).
+- **FR-PR-9** Each profile **shall** have a stable UUID (per §6.1). Discarding a profile and recreating an equivalent one produces a **new** profile identity; the system **shall not** treat the recreated profile as a continuation of the old one on either side.
+- **FR-PR-10** The system **shall** distinguish two destructive operations:
+  - **Reset profile** — retain the profile configuration but clear its sync index/state; the next run behaves as a first sync (full rescan, no delete-awareness until a new baseline is established).
+  - **Delete profile** — remove the profile configuration *and* its local state; per FR-PS-4 the user is prompted whether to also remove it (and its state) on the peer.
+- **FR-PR-11 [REC]** On save, the system **should** detect **overlapping anchors** across profiles (the same folder, or nested folders, covered by more than one profile) and warn the user, since overlapping profiles can express contradictory desired states. Optionally define precedence or block the overlap.
 
 ### 3.3 Peer Discovery & Pairing (FR-DP)
 - **FR-DP-1** The system **shall** automatically detect other File Sync instances running on the same local network and present them as selectable peers.
@@ -150,6 +155,7 @@ The system is a **peer-to-peer** application: there is no central server. Each i
 - **FR-ST-4** The system **shall** keep a **run history** (timestamp, direction, files added/updated/deleted, conflicts, errors) viewable in the UI.
 - **FR-ST-5** State **shall** survive app restarts and be stored in **SQLite** (via the Rust `rusqlite` or `sqlx` crate), used in a crash-safe, transactional manner (WAL mode). One database per profile or a single database with a profile key — **[REC]** single DB with per-profile tables/keys for simpler backup.
 - **FR-ST-6 (Phase 3) [REC]** State **may** later be mirrored to the cloud / a shared Google Drive folder. The local store remains the source of truth; cloud is a convenience/backup. The data model **should** be designed so this can be added without redesign.
+- **FR-ST-7** The system **shall** be able to compute and report **drift** for a profile: the difference between desired state (the profile definition) and observed state (current filesystem + last-synced index) — e.g. counts of files pending, in conflict, or failed, plus time since last clean sync. This desired-vs-observed reporting is a core advantage of the declarative profile model.
 
 ### 3.9 Profile Synchronization (FR-PS)
 - **FR-PS-1** Profiles **shall** be **discoverable from either instance**: when paired, an instance can see profiles defined on its peer that target it.
@@ -164,6 +170,7 @@ The system is a **peer-to-peer** application: there is no central server. Each i
 - **FR-UI-4** During a run, the UI **shall** show progress (current file, files/bytes done vs. remaining) and allow cancel.
 - **FR-UI-5** The UI **shall** present a **preview/dry-run** of planned actions (to copy / to update / to delete / conflicts) before applying, especially for mirror and bidirectional modes. **[REC]**
 - **FR-UI-6** The UI **shall** display per-profile state: last sync time, counts, and run history; and surface conflicts and errors clearly.
+- **FR-UI-7 [REC]** The UI **should** surface per-profile **compliance/health**: in-sync vs drifted status, pending/conflict/error counts, and last successful sync time, so profiles can be monitored at a glance. This view becomes the trigger surface for automatic reconciliation in Phase 2.
 
 ---
 
@@ -282,6 +289,14 @@ All MVP-blocking questions are resolved as follows:
 - Minimum supported macOS version (recommend macOS 13+).
 - Whether the engine ships also as a headless CLI/daemon (the architecture supports it; see §10).
 
+### 7.1 Interaction model — dual-pane browser (evaluated, rejected)
+
+A dual-pane "browse local + remote filesystem, drag to transfer" model (FileZilla / Beyond Compare style) was evaluated and **deliberately not adopted**:
+- A drag is **imperative and point-in-time**, whereas sync here is **declarative and ongoing**; bidirectional and delete-aware sync require the persistent index, which a drag gesture cannot express.
+- Browsing the remote filesystem **widens the security scope** and is constrained by macOS TCC / Full-Disk-Access anyway, so the whole remote disk cannot reliably be shown.
+- Profiles provide **auditable, manageable desired-state** with drift/compliance reporting (FR-ST-7, FR-UI-7); profile config is disposable metadata (FR-PR-9/10).
+- A lightweight **quick-send** (FR-SM-6) covers the one-off-copy convenience the dual pane would have offered.
+
 ---
 
 ## 8. Representative Acceptance Scenarios
@@ -324,6 +339,7 @@ All MVP-blocking questions are resolved as follows:
 | Cloud / Google Drive state (later) | FR-ST-6 (Phase 3) |
 | Trusted network assumption | A-2, NFR-SEC |
 | Profiles discoverable from A or B; config synced on sync | FR-PS-1..3 |
+| Interaction model (profiles vs dual-pane) | §7.1, FR-ST-7, FR-UI-7 |
 
 ---
 
