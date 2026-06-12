@@ -89,6 +89,7 @@ The system is a **peer-to-peer** application: there is no central server. Each i
 - **FR-SM-3** In Bidirectional mode, both sides **shall** converge so that each path holds the most-recent agreed version, reconciled using the sync index, content checksum, and modification time (see §3.6).
 - **FR-SM-4** All sync directions **shall** be **incremental**: only files that differ from the destination (or have changed since the last run) are transferred (see §3.4).
 - **FR-SM-5** Push/Pull **shall** offer two sub-behaviors, selectable per profile: **additive** (default — never delete on destination) and **mirror** (delete destination files that no longer exist on source). Delete propagation is **opt-in**; it is off unless the user explicitly enables it for the profile. The same opt-in governs deletion propagation in Bidirectional mode (see FR-CR-6).
+- **FR-SM-6** The system **shall** support **quick-send**: a one-shot, profile-less transfer of a selected file or folder to a paired peer. Quick-send **shall not** create a profile, **shall not** write to any sync index, and **shall not** participate in drift tracking (FR-ST-7) or delete propagation. It **shall** reuse the authenticated, encrypted transport (NFR-SEC) and **shall** be recorded in the run history (FR-ST-4) as a distinct entry type. Quick-send writes to the destination **shall** still be atomic (FR-FH-7).
 
 ### 3.2 Sync Profiles (FR-PR)
 - **FR-PR-1** A user **shall** be able to create, edit, rename, duplicate, and delete sync profiles.
@@ -103,7 +104,10 @@ The system is a **peer-to-peer** application: there is no central server. Each i
 - **FR-PR-10** The system **shall** distinguish two destructive operations:
   - **Reset profile** — retain the profile configuration but clear its sync index/state; the next run behaves as a first sync (full rescan, no delete-awareness until a new baseline is established).
   - **Delete profile** — remove the profile configuration *and* its local state; per FR-PS-4 the user is prompted whether to also remove it (and its state) on the peer.
-- **FR-PR-11 [REC]** On save, the system **should** detect **overlapping anchors** across profiles (the same folder, or nested folders, covered by more than one profile) and warn the user, since overlapping profiles can express contradictory desired states. Optionally define precedence or block the overlap.
+- **FR-PR-11** On save, the system **shall** detect **overlapping anchors** across profiles — the same folder, or a folder nested within another profile's anchor — and act based on the most permissive delete-propagation setting among the involved profiles:
+  - If **all** overlapping profiles are **additive** (no delete propagation), the system **shall warn** the user and allow the save. The warning **shall** name the conflicting profiles and the overlapping path.
+  - If **any** of the overlapping profiles has **mirror** semantics (delete propagation enabled, per FR-SM-5 — including Bidirectional with delete propagation on per FR-CR-6), the system **shall block** the save until the user removes the overlap or disables delete propagation, since a mirror profile can delete files that another profile is also managing.
+  - Overlap detection **shall** be scoped to profiles targeting the **same peer**; profiles targeting different peers do not overlap for this rule.
 
 ### 3.3 Peer Discovery & Pairing (FR-DP)
 - **FR-DP-1** The system **shall** automatically detect other File Sync instances running on the same local network and present them as selectable peers.
@@ -295,7 +299,7 @@ A dual-pane "browse local + remote filesystem, drag to transfer" model (FileZill
 - A drag is **imperative and point-in-time**, whereas sync here is **declarative and ongoing**; bidirectional and delete-aware sync require the persistent index, which a drag gesture cannot express.
 - Browsing the remote filesystem **widens the security scope** and is constrained by macOS TCC / Full-Disk-Access anyway, so the whole remote disk cannot reliably be shown.
 - Profiles provide **auditable, manageable desired-state** with drift/compliance reporting (FR-ST-7, FR-UI-7); profile config is disposable metadata (FR-PR-9/10).
-- A lightweight **quick-send** (FR-SM-6) covers the one-off-copy convenience the dual pane would have offered.
+- A lightweight **quick-send** (FR-SM-6) covers the one-off-copy convenience the dual pane would have offered, without the persistence/security cost.
 
 ---
 
@@ -315,6 +319,12 @@ A dual-pane "browse local + remote filesystem, drag to transfer" model (FileZill
 | AC-10 | Create profile on A, sync | Profile configuration appears on B (replicated) |
 | AC-11 | Depth set to 1 | Only anchor + first level synced; deeper items ignored |
 | AC-12 | Clock on B is 5 minutes ahead | Equality decided by hash; ordering not corrupted by skew |
+| AC-13 | Delete a profile on A and recreate one with the same name and anchors | New profile has a fresh UUID; first run is treated as a first sync (FR-PR-9, FR-CR-7); no orphaned state on B is auto-relinked |
+| AC-14 | Reset profile on A | Config retained; index cleared; next run rescans fully and establishes a new baseline without delete propagation |
+| AC-15 | Save a new additive profile whose anchor overlaps an existing additive profile (same peer) | Save succeeds with a warning naming the conflicting profile and overlapping path |
+| AC-16 | Save a profile with mirror semantics whose anchor overlaps any existing profile (same peer) | Save is blocked until the overlap is removed or delete propagation is disabled |
+| AC-17 | Open the health view for a profile with local edits not yet synced | Drift report shows pending counts and last clean sync time without performing a sync |
+| AC-18 | Quick-send a folder from A to B | Folder copied to B with atomic writes; no profile created on either side; run history records a quick-send entry; subsequent profile drift reports are unaffected |
 
 ---
 
@@ -340,6 +350,7 @@ A dual-pane "browse local + remote filesystem, drag to transfer" model (FileZill
 | Trusted network assumption | A-2, NFR-SEC |
 | Profiles discoverable from A or B; config synced on sync | FR-PS-1..3 |
 | Interaction model (profiles vs dual-pane) | §7.1, FR-ST-7, FR-UI-7 |
+| One-off transfers (quick-send) | FR-SM-6 |
 
 ---
 
