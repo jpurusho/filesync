@@ -1,0 +1,13 @@
+[package]
+name = "syncstore"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
+rusqlite.workspace = true
+rusqlite_migration.workspace = true
