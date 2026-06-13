@@ -10,3 +10,26 @@ workspace = true
 [dependencies]
 thiserror.workspace = true
 tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+rustls.workspace = true
+tokio-rustls.workspace = true
+rcgen.workspace = true
+pem.workspace = true
+ring.workspace = true
+mdns-sd.workspace = true
+sha2.workspace = true
+hostname.workspace = true
+rmp-serde.workspace = true
+tokio-util.workspace = true
+bytes.workspace = true
+synccore = { path = "../synccore" }
+futures-util = { workspace = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util", "macros"] }
+rustls.workspace = true
+tokio-rustls.workspace = true

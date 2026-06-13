@@ -1,6 +1,6 @@
 # M1 — Local Engine Kernel
 
-**Status:** ready to execute
+**Status:** complete
 **Owner model:** Opus (reconciler logic, conflict policy, correctness-critical paths)
 
 ## Goal

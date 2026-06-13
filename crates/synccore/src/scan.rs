@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 use crate::path::RelPath;
 
 /// Configuration for scanning a single anchor.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScanConfig {
     /// Maximum recursion depth. -1 means unlimited.
     pub max_depth: i32,
@@ -39,17 +39,44 @@ pub enum EntryKind {
 }
 
 /// A single filesystem entry captured during a scan.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct FileEntry {
     pub path: RelPath,
     pub kind: EntryKind,
     pub size: u64,
+    #[serde(with = "system_time_serde")]
     pub mtime: SystemTime,
     pub hash: Option<String>,
 }
 
+mod system_time_serde {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Serialize, Deserialize)]
+    struct Repr {
+        secs: u64,
+        nanos: u32,
+    }
+
+    pub fn serialize<S: Serializer>(t: &SystemTime, s: S) -> Result<S::Ok, S::Error> {
+        let d = t.duration_since(UNIX_EPOCH).unwrap_or_default();
+        Repr {
+            secs: d.as_secs(),
+            nanos: d.subsec_nanos(),
+        }
+        .serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<SystemTime, D::Error> {
+        let r = Repr::deserialize(d)?;
+        Ok(UNIX_EPOCH + Duration::new(r.secs, r.nanos))
+    }
+}
+
 /// The result of scanning a directory tree — a snapshot of all entries.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Snapshot {
     pub entries: BTreeMap<RelPath, FileEntry>,
 }

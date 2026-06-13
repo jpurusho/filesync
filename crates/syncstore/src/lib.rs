@@ -1,4 +1,8 @@
+pub mod index;
 pub mod migrations;
+pub mod peers;
+pub mod profiles;
+pub mod runs;
 
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
@@ -30,6 +34,7 @@ impl Db {
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
 
         let mut db = Self { conn };
         db.run_migrations()?;
@@ -39,6 +44,7 @@ impl Db {
     /// Open an in-memory database (for tests)
     pub fn in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
         let mut db = Self { conn };
         db.run_migrations()?;
         Ok(db)
@@ -71,6 +77,6 @@ mod tests {
     fn in_memory_db_initializes() {
         let db = Db::in_memory().expect("failed to create in-memory db");
         let version = db.schema_version().expect("failed to get schema version");
-        assert_eq!(version, "1");
+        assert_eq!(version, "5");
     }
 }

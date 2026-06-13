@@ -1,0 +1,95 @@
+use rusqlite::params;
+use uuid::Uuid;
+
+use crate::{Db, Result};
+
+#[derive(Debug, Clone)]
+pub struct PeerRow {
+    pub id: Uuid,
+    pub name: String,
+    pub fingerprint: String,
+    pub cert_pem: String,
+    pub paired_at: String,
+    pub last_seen: Option<String>,
+    pub is_online: bool,
+}
+
+impl Db {
+    pub fn insert_peer(&self, peer: &PeerRow) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO peers (id, name, fingerprint, cert_pem)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                peer.id.to_string(),
+                peer.name,
+                peer.fingerprint,
+                peer.cert_pem,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_peer(&self, id: Uuid) -> Result<Option<PeerRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, fingerprint, cert_pem, paired_at, last_seen, is_online
+             FROM peers WHERE id = ?1",
+        )?;
+
+        let row = stmt.query_row(params![id.to_string()], |row| {
+            Ok(PeerRow {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+                name: row.get(1)?,
+                fingerprint: row.get(2)?,
+                cert_pem: row.get(3)?,
+                paired_at: row.get(4)?,
+                last_seen: row.get(5)?,
+                is_online: row.get::<_, i32>(6)? != 0,
+            })
+        });
+
+        match row {
+            Ok(p) => Ok(Some(p)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    pub fn list_peers(&self) -> Result<Vec<PeerRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, fingerprint, cert_pem, paired_at, last_seen, is_online
+             FROM peers ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(PeerRow {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+                name: row.get(1)?,
+                fingerprint: row.get(2)?,
+                cert_pem: row.get(3)?,
+                paired_at: row.get(4)?,
+                last_seen: row.get(5)?,
+                is_online: row.get::<_, i32>(6)? != 0,
+            })
+        })?;
+
+        let mut peers = Vec::new();
+        for row in rows {
+            peers.push(row?);
+        }
+        Ok(peers)
+    }
+
+    pub fn update_peer_online(&self, id: Uuid, is_online: bool, last_seen: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE peers SET is_online = ?2, last_seen = ?3 WHERE id = ?1",
+            params![id.to_string(), i32::from(is_online), last_seen],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_peer(&self, id: Uuid) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM peers WHERE id = ?1", params![id.to_string()])?;
+        Ok(())
+    }
+}

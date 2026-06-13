@@ -12,7 +12,7 @@ pub enum Side {
 }
 
 /// Sync mode for a profile.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SyncMode {
     Push,
     Pull,
@@ -20,7 +20,7 @@ pub enum SyncMode {
 }
 
 /// Conflict resolution policy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ConflictPolicy {
     NewerWins,
     KeepBoth,
