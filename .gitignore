@@ -1,2 +1,25 @@
+# Claude Code local settings
 .claude/settings.local.json
 .claude/log_token_usage.py
+
+# Rust
+target/
+Cargo.lock
+
+# Node
+node_modules/
+ui/dist/
+
+# Tauri
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
