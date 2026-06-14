@@ -136,6 +136,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: false,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(
@@ -169,6 +170,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: true,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(
@@ -196,6 +198,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: false,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(
@@ -219,6 +222,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: true,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(
@@ -261,6 +265,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: true,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(
@@ -320,6 +325,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: false,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(
@@ -353,6 +359,7 @@ proptest! {
             remote_entries: &remote_entries,
             delete_propagation: false,
             peer_name: "TestPeer".to_owned(),
+            clock_offset_secs: 0,
         };
 
         let plan = synccore::reconcile::reconcile(

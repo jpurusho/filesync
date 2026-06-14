@@ -1,6 +1,7 @@
 use syncstore::Db;
 use syncstore::index::IndexEntryRow;
 use syncstore::profiles::{AnchorRow, ProfileRow};
+use syncstore::quick_sends::QuickSendRecordRow;
 use syncstore::runs::RunRecordRow;
 use uuid::Uuid;
 
@@ -190,4 +191,37 @@ fn run_records() {
     db.delete_profile(profile.id).unwrap();
     let after = db.get_runs(profile.id, 10).unwrap();
     assert!(after.is_empty());
+}
+
+#[test]
+fn quick_send_records() {
+    let db = test_db();
+    let peer_id = Uuid::new_v4();
+
+    let record = QuickSendRecordRow {
+        id: Uuid::new_v4(),
+        peer_id,
+        direction: "send".to_owned(),
+        destination_dir: "/Users/peer/Downloads".to_owned(),
+        started_at: "2026-06-13T09:00:00Z".to_owned(),
+        finished_at: "2026-06-13T09:00:02Z".to_owned(),
+        status: "success".to_owned(),
+        files_transferred: 3,
+        bytes_transferred: 10240,
+        error_summary: None,
+    };
+    db.insert_quick_send(&record).unwrap();
+
+    let all = db.get_quick_sends(10).unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].direction, "send");
+    assert_eq!(all[0].files_transferred, 3);
+    assert_eq!(all[0].bytes_transferred, 10240);
+
+    let by_peer = db.get_quick_sends_for_peer(peer_id, 10).unwrap();
+    assert_eq!(by_peer.len(), 1);
+
+    let other_peer = Uuid::new_v4();
+    let none = db.get_quick_sends_for_peer(other_peer, 10).unwrap();
+    assert!(none.is_empty());
 }

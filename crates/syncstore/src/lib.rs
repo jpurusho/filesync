@@ -2,6 +2,7 @@ pub mod index;
 pub mod migrations;
 pub mod peers;
 pub mod profiles;
+pub mod quick_sends;
 pub mod runs;
 
 use rusqlite::{Connection, OpenFlags};
@@ -77,6 +78,6 @@ mod tests {
     fn in_memory_db_initializes() {
         let db = Db::in_memory().expect("failed to create in-memory db");
         let version = db.schema_version().expect("failed to get schema version");
-        assert_eq!(version, "5");
+        assert_eq!(version, "6");
     }
 }

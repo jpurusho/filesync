@@ -110,6 +110,7 @@ fn run_anchor(
         remote_entries: &remote_snap.entries,
         delete_propagation: profile.delete_propagation,
         peer_name: profile.peer_name.clone(),
+        clock_offset_secs: 0,
     };
     let mut sync_plan =
         reconcile::reconcile(&diff, index, profile.mode, profile.conflict_policy, &ctx);

@@ -1,6 +1,6 @@
 # M3 — Networked Push/Pull over TLS-over-TCP
 
-**Status:** in-progress
+**Status:** complete
 **Owner model:** Opus (protocol design, correctness of remote apply)
 
 ## Goal

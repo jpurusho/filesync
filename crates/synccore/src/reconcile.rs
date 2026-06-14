@@ -84,7 +84,12 @@ pub struct ReconcileContext<'a> {
     pub remote_entries: &'a BTreeMap<RelPath, FileEntry>,
     pub delete_propagation: bool,
     pub peer_name: String,
+    /// Responder clock minus initiator clock in seconds (positive = responder is ahead).
+    /// Used to adjust remote mtimes into initiator's clock domain before comparing.
+    pub clock_offset_secs: i64,
 }
+
+const CLOCK_SKEW_TOLERANCE_SECS: i64 = 5;
 
 /// Reconcile a diff into a sync plan.
 ///
@@ -382,13 +387,24 @@ fn resolve_delete_vs_edit(
 }
 
 fn pick_newer(path: &RelPath, ctx: &ReconcileContext<'_>) -> Side {
-    let local_mtime = ctx.local_entries.get(path).map(|e| e.mtime);
-    let remote_mtime = ctx.remote_entries.get(path).map(|e| e.mtime);
+    let to_secs = |t: std::time::SystemTime| -> i64 {
+        t.duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64)
+    };
 
-    match (local_mtime, remote_mtime) {
+    let local_secs = ctx.local_entries.get(path).map(|e| to_secs(e.mtime));
+    let remote_secs = ctx.remote_entries.get(path).map(|e| to_secs(e.mtime));
+
+    match (local_secs, remote_secs) {
         (Some(l), Some(r)) => {
-            if l >= r {
-                Side::Local // tie-break: prefer local
+            // Adjust remote mtime into initiator's clock domain.
+            let adjusted_r = r - ctx.clock_offset_secs;
+            if (l - adjusted_r).abs() <= CLOCK_SKEW_TOLERANCE_SECS {
+                // Within tolerance — hashes already confirmed unequal at this point,
+                // so we cannot determine which is newer. Tie-break: prefer local.
+                Side::Local
+            } else if l >= adjusted_r {
+                Side::Local
             } else {
                 Side::Remote
             }
@@ -472,6 +488,7 @@ mod tests {
             remote_entries: remote,
             delete_propagation,
             peer_name: "PeerB".to_owned(),
+            clock_offset_secs: 0,
         }
     }
 

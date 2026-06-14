@@ -86,6 +86,25 @@ CREATE TABLE peers (
 UPDATE meta SET value = '5' WHERE key = 'schema_version';
 ";
 
+const QUICK_SEND_RECORDS: &str = r"
+CREATE TABLE quick_send_records (
+    id TEXT PRIMARY KEY NOT NULL,
+    peer_id TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK (direction IN ('send', 'receive')),
+    destination_dir TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('success', 'partial', 'failed')),
+    files_transferred INTEGER NOT NULL DEFAULT 0,
+    bytes_transferred INTEGER NOT NULL DEFAULT 0,
+    error_summary TEXT
+);
+
+CREATE INDEX idx_quick_send_peer ON quick_send_records(peer_id, started_at);
+
+UPDATE meta SET value = '6' WHERE key = 'schema_version';
+";
+
 #[must_use]
 pub fn get_migrations() -> Migrations<'static> {
     Migrations::new(vec![
@@ -94,5 +113,6 @@ pub fn get_migrations() -> Migrations<'static> {
         M::up(SYNC_INDEX),
         M::up(RUN_RECORDS),
         M::up(PEERS),
+        M::up(QUICK_SEND_RECORDS),
     ])
 }

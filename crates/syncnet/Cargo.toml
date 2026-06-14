@@ -25,6 +25,7 @@ hostname.workspace = true
 rmp-serde.workspace = true
 tokio-util.workspace = true
 bytes.workspace = true
+walkdir.workspace = true
 synccore = { path = "../synccore" }
 futures-util = { workspace = true }
 

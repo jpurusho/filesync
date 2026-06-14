@@ -36,6 +36,7 @@ impl SyncHandler {
         Self { peer_id }
     }
 
+    #[allow(clippy::too_many_lines)]
     pub async fn serve<S: AsyncRead + AsyncWrite + Unpin>(
         &self,
         stream: &mut FramedStream<S>,
@@ -133,6 +134,36 @@ impl SyncHandler {
                                 }
                             }
                         }
+                        RpcRequest::QuickSend {
+                            transfer_id,
+                            destination_dir,
+                            entries,
+                        } => {
+                            let result = self
+                                .handle_quick_send(stream, &destination_dir, &entries)
+                                .await;
+                            let resp = match result {
+                                Ok(count) => RpcResponse::QuickSendAck {
+                                    transfer_id,
+                                    files_written: count,
+                                },
+                                Err(e) => RpcResponse::Error {
+                                    code: ErrorCode::IoError,
+                                    message: e.to_string(),
+                                },
+                            };
+                            let resp_bytes = encode_response(req_id, resp)?;
+                            send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
+                        }
+                        RpcRequest::RenameRemote {
+                            anchor_id,
+                            path,
+                            new_name,
+                        } => {
+                            let response = self.rename_remote(anchor_id, &path, &new_name, &session);
+                            let resp_bytes = encode_response(req_id, response)?;
+                            send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
+                        }
                         other => {
                             let response = self.handle_request(other, &mut session);
                             let resp_bytes = encode_response(req_id, response)?;
@@ -157,7 +188,8 @@ impl SyncHandler {
                 profile_id,
                 mode: _,
                 anchors,
-            } => self.start_session(profile_id, anchors, session),
+                initiator_unix_secs,
+            } => self.start_session(profile_id, anchors, initiator_unix_secs, session),
 
             RpcRequest::ScanRemote { anchor_id, config } => {
                 self.scan_remote(anchor_id, &config, session)
@@ -177,11 +209,14 @@ impl SyncHandler {
                 RpcResponse::Ok
             }
 
-            // Handled separately in serve() for streaming
-            RpcRequest::PutFile { .. } | RpcRequest::GetFiles { .. } => {
+            // Handled separately in serve() for streaming or direct dispatch
+            RpcRequest::PutFile { .. }
+            | RpcRequest::GetFiles { .. }
+            | RpcRequest::QuickSend { .. }
+            | RpcRequest::RenameRemote { .. } => {
                 RpcResponse::Error {
                     code: ErrorCode::Internal,
-                    message: "bug: streaming RPCs handled in serve loop".to_owned(),
+                    message: "bug: this RPC is handled in serve loop".to_owned(),
                 }
             }
         }
@@ -191,6 +226,7 @@ impl SyncHandler {
         &self,
         profile_id: Uuid,
         anchors: Vec<AnchorSpec>,
+        initiator_unix_secs: i64,
         session: &mut Option<SessionState>,
     ) -> RpcResponse {
         let mut allowed = HashMap::new();
@@ -211,8 +247,18 @@ impl SyncHandler {
             allowed_anchors: allowed,
         });
 
-        info!(profile_id = %profile_id, peer_id = %self.peer_id, "session started");
-        RpcResponse::Ok
+        let responder_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        let clock_offset_secs = responder_secs - initiator_unix_secs;
+
+        info!(
+            profile_id = %profile_id,
+            peer_id = %self.peer_id,
+            clock_offset_secs,
+            "session started"
+        );
+        RpcResponse::SessionStarted { clock_offset_secs }
     }
 
     fn scan_remote(
@@ -369,6 +415,48 @@ impl SyncHandler {
         }
     }
 
+    fn rename_remote(
+        &self,
+        anchor_id: Uuid,
+        path: &RelPath,
+        new_name: &str,
+        session: &Option<SessionState>,
+    ) -> RpcResponse {
+        let Some(sess) = session else {
+            return RpcResponse::Error {
+                code: ErrorCode::InvalidSession,
+                message: "no active session".to_owned(),
+            };
+        };
+
+        let Some(root) = sess.allowed_anchors.get(&anchor_id) else {
+            return RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("anchor {anchor_id} not allowed"),
+            };
+        };
+
+        let from = root.join(path.to_path_buf());
+        let to = root.join(new_name);
+
+        if let Some(parent) = to.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                return RpcResponse::Error {
+                    code: ErrorCode::IoError,
+                    message: format!("create parent for rename: {e}"),
+                };
+            }
+        }
+
+        match fs::rename(&from, &to) {
+            Ok(()) => RpcResponse::Ok,
+            Err(e) => RpcResponse::Error {
+                code: ErrorCode::IoError,
+                message: format!("rename: {e}"),
+            },
+        }
+    }
+
     async fn receive_and_write_file<S: AsyncRead + AsyncWrite + Unpin>(
         &self,
         stream: &mut FramedStream<S>,
@@ -424,6 +512,44 @@ impl SyncHandler {
         send_frame(stream, MessageType::FileData, Vec::new()).await?;
 
         Ok(())
+    }
+
+    /// Handle a quick-send transfer (FR-SM-6).
+    /// No session required — just receive files and write atomically.
+    async fn handle_quick_send<S: AsyncRead + AsyncWrite + Unpin>(
+        &self,
+        stream: &mut FramedStream<S>,
+        destination_dir: &str,
+        entries: &[crate::rpc::QuickSendEntry],
+    ) -> Result<u64, Error> {
+        let dest_root = PathBuf::from(destination_dir);
+        if !dest_root.exists() {
+            fs::create_dir_all(&dest_root)
+                .map_err(|e| Error::Session(format!("create dest dir: {e}")))?;
+        }
+
+        // Send OK to signal ready for file data
+        let ack_bytes = encode_response(0, RpcResponse::Ok)?;
+        send_frame(stream, MessageType::RpcResponse, ack_bytes).await?;
+
+        let mut files_written: u64 = 0;
+
+        for entry in entries {
+            let dest_path = dest_root.join(entry.rel_path.to_path_buf());
+
+            if entry.is_dir {
+                fs::create_dir_all(&dest_path)
+                    .map_err(|e| Error::Session(format!("mkdir: {e}")))?;
+                continue;
+            }
+
+            // Receive file data
+            self.receive_and_write_file(stream, &dest_path, entry.mtime_secs)
+                .await?;
+            files_written += 1;
+        }
+
+        Ok(files_written)
     }
 }
 

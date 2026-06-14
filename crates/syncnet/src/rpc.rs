@@ -23,6 +23,8 @@ pub enum RpcRequest {
         profile_id: Uuid,
         mode: SyncMode,
         anchors: Vec<AnchorSpec>,
+        /// Initiator's current Unix timestamp; responder uses this to compute clock offset.
+        initiator_unix_secs: i64,
     },
     ScanRemote {
         anchor_id: Uuid,
@@ -49,15 +51,45 @@ pub enum RpcRequest {
     EndSession {
         run_id: Uuid,
     },
+    /// Quick-send: profile-less one-shot transfer (FR-SM-6).
+    /// The destination_dir is where files land on the responder.
+    QuickSend {
+        transfer_id: Uuid,
+        destination_dir: String,
+        entries: Vec<QuickSendEntry>,
+    },
+    /// Rename a file on the remote side (used for KeepBoth conflict resolution).
+    RenameRemote {
+        anchor_id: Uuid,
+        path: RelPath,
+        new_name: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuickSendEntry {
+    pub rel_path: RelPath,
+    pub size: u64,
+    pub mtime_secs: i64,
+    pub is_dir: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RpcResponse {
     Ok,
+    /// Response to StartSession carrying the clock offset for skew compensation.
+    SessionStarted {
+        /// responder_unix_secs - initiator_unix_secs
+        clock_offset_secs: i64,
+    },
     Snapshot(Snapshot),
     FileHeader {
         path: RelPath,
         size: u64,
+    },
+    QuickSendAck {
+        transfer_id: Uuid,
+        files_written: u64,
     },
     Error {
         code: ErrorCode,
