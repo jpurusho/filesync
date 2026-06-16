@@ -277,4 +277,44 @@ impl Db {
         )?;
         Ok(())
     }
+
+    /// List profiles pending deletion (for UI prompt).
+    pub fn list_pending_deletions(&self) -> Result<Vec<ProfileRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, mode, delete_propagation, conflict_policy, peer_name, created_at, updated_at, version, peer_id, origin_instance_id, pending_deletion
+             FROM profiles WHERE pending_deletion = 1 ORDER BY name",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(ProfileRow {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+                name: row.get(1)?,
+                mode: row.get(2)?,
+                delete_propagation: row.get::<_, i32>(3)? != 0,
+                conflict_policy: row.get(4)?,
+                peer_name: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+                version: row.get::<_, i64>(8)? as u64,
+                peer_id: row.get(9)?,
+                origin_instance_id: row.get(10)?,
+                pending_deletion: row.get::<_, i32>(11)? != 0,
+            })
+        })?;
+
+        let mut profiles = Vec::new();
+        for row in rows {
+            profiles.push(row?);
+        }
+        Ok(profiles)
+    }
+
+    /// Clear pending_deletion flag to restore profile to active state.
+    pub fn clear_pending_deletion(&self, profile_id: Uuid) -> Result<()> {
+        self.conn.execute(
+            "UPDATE profiles SET pending_deletion = 0 WHERE id = ?1",
+            params![profile_id.to_string()],
+        )?;
+        Ok(())
+    }
 }

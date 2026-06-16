@@ -1,0 +1,95 @@
+use serde::{Deserialize, Serialize};
+
+/// Simplified profile view for list display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileView {
+    pub id: String,
+    pub name: String,
+    pub mode: String,
+    pub peer_name: String,
+    pub delete_propagation: bool,
+    pub conflict_policy: String,
+    pub updated_at: String,
+    pub version: u64,
+    pub pending_deletion: bool,
+}
+
+/// Full profile detail including anchors
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileDetail {
+    pub id: String,
+    pub name: String,
+    pub mode: String,
+    pub peer_name: String,
+    pub peer_id: String,
+    pub delete_propagation: bool,
+    pub conflict_policy: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub version: u64,
+    pub origin_instance_id: String,
+    pub pending_deletion: bool,
+    pub anchors: Vec<AnchorView>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnchorView {
+    pub id: i64,
+    pub local_path: String,
+    pub remote_path: String,
+    pub max_depth: i32,
+    pub include_hidden: bool,
+    pub ignore_patterns: Vec<String>,
+}
+
+/// Peer view for list and detail
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerView {
+    pub id: String,
+    pub name: String,
+    pub fingerprint: String,
+    pub paired_at: String,
+    pub last_seen: Option<String>,
+    pub is_online: bool,
+}
+
+/// Sync status for a profile
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncStatus {
+    pub profile_id: String,
+    pub last_sync_at: Option<String>,
+    pub last_sync_direction: Option<String>,
+    pub files_synced: Option<u64>,
+    pub status: String, // "idle" | "running" | "error"
+    pub error_message: Option<String>,
+}
+
+/// Input for creating/updating a profile
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProfileInput {
+    pub name: String,
+    pub mode: String,
+    pub peer_name: String,
+    pub peer_id: String,
+    pub delete_propagation: bool,
+    pub conflict_policy: String,
+    pub anchors: Vec<AnchorInput>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnchorInput {
+    pub local_path: String,
+    pub remote_path: String,
+    pub max_depth: i32,
+    pub include_hidden: bool,
+    pub ignore_patterns: Vec<String>,
+}
+
+/// Drift summary for a profile
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DriftSummary {
+    pub profile_id: String,
+    pub files_tracked: u64,
+    pub pending_local_changes: u64,
+    pub last_scan_at: String,
+}
