@@ -78,6 +78,6 @@ mod tests {
     fn in_memory_db_initializes() {
         let db = Db::in_memory().expect("failed to create in-memory db");
         let version = db.schema_version().expect("failed to get schema version");
-        assert_eq!(version, "6");
+        assert_eq!(version, "7");
     }
 }

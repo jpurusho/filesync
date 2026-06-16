@@ -15,10 +15,17 @@ use synccore::path::RelPath;
 use synccore::scan::EntryKind;
 
 use syncnet::handler::SyncHandler;
+use syncnet::handler::{profile_to_wire, wire_to_profile};
 use syncnet::identity::Identity;
-use syncnet::session::{RemoteAnchor, RemoteSyncConfig, quick_send, run_remote_bidi, run_remote_push};
+use syncnet::session::{
+    RemoteAnchor, RemoteSyncConfig, deliver_tombstones, quick_send,
+    replicate_profile, run_remote_bidi, run_remote_push,
+};
 use syncnet::tls;
 use syncnet::transport::framed;
+
+use syncstore::Db;
+use syncstore::profiles::{AnchorRow, ProfileRow};
 
 fn default_scan_config() -> ScanConfig {
     ScanConfig {
@@ -114,7 +121,7 @@ async fn e2e_push_over_tls() {
             Err(e) => panic!("SERVER TLS accept failed: {e}"),
         };
 
-        let handler = SyncHandler::new(peer_a_id);
+        let handler = SyncHandler::new(peer_a_id, Uuid::new_v4());
         let mut stream = framed(tls_stream);
         if let Err(e) = handler.serve(&mut stream).await {
             panic!("SERVER handler error: {e}");
@@ -247,7 +254,7 @@ async fn quick_send_single_file() {
         let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
         let (tcp_stream, _) = tcp_listener.accept().await.unwrap();
         let tls_stream = acceptor.accept(tcp_stream).await.unwrap();
-        let handler = SyncHandler::new(peer_a_id);
+        let handler = SyncHandler::new(peer_a_id, Uuid::new_v4());
         let mut stream = framed(tls_stream);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -309,7 +316,7 @@ async fn quick_send_directory() {
         let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
         let (tcp_stream, _) = tcp_listener.accept().await.unwrap();
         let tls_stream = acceptor.accept(tcp_stream).await.unwrap();
-        let handler = SyncHandler::new(peer_a_id);
+        let handler = SyncHandler::new(peer_a_id, Uuid::new_v4());
         let mut stream = framed(tls_stream);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -386,7 +393,7 @@ async fn run_bidi_test(
         let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
         let (tcp, _) = tcp_listener.accept().await.unwrap();
         let tls = acceptor.accept(tcp).await.unwrap();
-        let handler = SyncHandler::new(peer_a_id);
+        let handler = SyncHandler::new(peer_a_id, Uuid::new_v4());
         let mut stream = framed(tls);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -554,7 +561,7 @@ async fn e2e_push_updated_index() {
         let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
         let (tcp, _) = tcp_listener.accept().await.unwrap();
         let tls = acceptor.accept(tcp).await.unwrap();
-        let handler = SyncHandler::new(peer_a_id);
+        let handler = SyncHandler::new(peer_a_id, Uuid::new_v4());
         let mut stream = framed(tls);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -595,4 +602,402 @@ async fn e2e_push_updated_index() {
     assert!(result.updated_index.entries.contains_key(&RelPath::new("b.txt")));
     let a_entry = &result.updated_index.entries[&RelPath::new("a.txt")];
     assert_eq!(a_entry.size, 6); // "file a".len()
+}
+
+// --- Profile Replication Tests (M5) ---
+
+fn make_test_profile(instance_id: Uuid, peer_id: Uuid) -> (ProfileRow, Vec<AnchorRow>) {
+    let profile_id = Uuid::new_v4();
+    let profile = ProfileRow {
+        id: profile_id,
+        name: "Photos Sync".to_owned(),
+        mode: "bidirectional".to_owned(),
+        delete_propagation: false,
+        conflict_policy: "newer_wins".to_owned(),
+        peer_name: "PeerB".to_owned(),
+        created_at: "2026-06-14T10:00:00Z".to_owned(),
+        updated_at: "2026-06-14T10:00:00Z".to_owned(),
+        version: 1,
+        peer_id: peer_id.to_string(),
+        origin_instance_id: instance_id.to_string(),
+        pending_deletion: false,
+    };
+    let anchors = vec![AnchorRow {
+        id: 0,
+        profile_id,
+        local_path: "/Users/alice/Photos".to_owned(),
+        remote_path: "/Users/bob/Backup/Photos".to_owned(),
+        max_depth: -1,
+        include_hidden: false,
+        ignore_patterns: vec![".DS_Store".to_owned()],
+    }];
+    (profile, anchors)
+}
+
+/// Profile replicated on sync: A sends profile to B, B stores it with paths flipped.
+#[tokio::test]
+async fn e2e_profile_replicated_on_sync() {
+    let peer_a = Identity::generate().unwrap();
+    let peer_b = Identity::generate().unwrap();
+
+    let a_pinned = vec![peer_b.cert_der.clone()];
+    let b_pinned = vec![peer_a.cert_der.clone()];
+
+    // Create a DB for B to receive the profile
+    let db_dir = TempDir::new().unwrap();
+    let db_path = db_dir.path().join("b.db");
+    let db_b = Db::open(&db_path).unwrap();
+    drop(db_b); // Close so handler can reopen
+
+    let instance_a_id = peer_a.id;
+    let instance_b_id = peer_b.id;
+    let (profile, anchors) = make_test_profile(instance_a_id, instance_b_id);
+    let profile_id = profile.id;
+
+    let tcp_listener =
+        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+            .await
+            .unwrap();
+    let server_addr = tcp_listener.local_addr().unwrap();
+
+    let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
+    let client_config = tls::make_client_config(&peer_a, &a_pinned, false).unwrap();
+
+    let db_path_clone = db_path.clone();
+    let server_handle = tokio::spawn(async move {
+        let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
+        let (tcp, _) = tcp_listener.accept().await.unwrap();
+        let tls = acceptor.accept(tcp).await.unwrap();
+        let handler = SyncHandler::with_db_path(instance_a_id, instance_b_id, db_path_clone);
+        let mut stream = framed(tls);
+        handler.serve(&mut stream).await.unwrap();
+    });
+
+    let profile_clone = profile.clone();
+    let anchors_clone = anchors.clone();
+    let client_handle = tokio::spawn(async move {
+        let connector = TlsConnector::from(client_config);
+        let tcp = TcpStream::connect(server_addr).await.unwrap();
+        let sn = ServerName::try_from("filesync.local").unwrap();
+        let tls = connector.connect(sn, tcp).await.unwrap();
+        let mut stream = framed(tls);
+        let mut req_id = 0u32;
+
+        let accepted = replicate_profile(
+            &mut stream,
+            &mut req_id,
+            &profile_clone,
+            &anchors_clone,
+            instance_a_id,
+            None::<&std::path::Path>,
+        )
+        .await
+        .unwrap();
+
+        assert!(accepted, "peer should accept new profile");
+    });
+
+    let (srv, cli) = tokio::join!(server_handle, client_handle);
+    srv.unwrap();
+    cli.unwrap();
+
+    // Verify B's database has the profile with paths flipped
+    let db_b = Db::open(&db_path).unwrap();
+    let loaded = db_b.get_profile(profile_id).unwrap().unwrap();
+    assert_eq!(loaded.name, "Photos Sync");
+    assert_eq!(loaded.version, 1);
+    assert_eq!(loaded.origin_instance_id, instance_a_id.to_string());
+
+    let loaded_anchors = db_b.get_anchors(profile_id).unwrap();
+    assert_eq!(loaded_anchors.len(), 1);
+    // B's local_path should be what was A's remote_path (paths flipped)
+    assert_eq!(loaded_anchors[0].local_path, "/Users/bob/Backup/Photos");
+    assert_eq!(loaded_anchors[0].remote_path, "/Users/alice/Photos");
+}
+
+/// Profile version conflict: peer has newer version, initiator updates.
+#[tokio::test]
+async fn e2e_profile_version_conflict() {
+    let peer_a = Identity::generate().unwrap();
+    let peer_b = Identity::generate().unwrap();
+
+    let a_pinned = vec![peer_b.cert_der.clone()];
+    let b_pinned = vec![peer_a.cert_der.clone()];
+
+    let instance_a_id = peer_a.id;
+    let instance_b_id = peer_b.id;
+
+    // B already has the profile at version 3 (newer)
+    let db_dir = TempDir::new().unwrap();
+    let db_path = db_dir.path().join("b.db");
+    {
+        let db_b = Db::open(&db_path).unwrap();
+        let profile_id = Uuid::new_v4();
+        let profile = ProfileRow {
+            id: profile_id,
+            name: "Newer Name".to_owned(),
+            mode: "push".to_owned(),
+            delete_propagation: true,
+            conflict_policy: "keep_both".to_owned(),
+            peer_name: "PeerA".to_owned(),
+            created_at: "2026-06-14T10:00:00Z".to_owned(),
+            updated_at: "2026-06-14T12:00:00Z".to_owned(),
+            version: 3,
+            peer_id: instance_a_id.to_string(),
+            origin_instance_id: instance_a_id.to_string(),
+            pending_deletion: false,
+        };
+        db_b.insert_profile(&profile).unwrap();
+        db_b.insert_anchor(&AnchorRow {
+            id: 0,
+            profile_id,
+            local_path: "/Users/bob/NewPath".to_owned(),
+            remote_path: "/Users/alice/Photos".to_owned(),
+            max_depth: -1,
+            include_hidden: true,
+            ignore_patterns: vec![],
+        }).unwrap();
+
+        // A tries to send version 1 (stale)
+        let old_profile = ProfileRow {
+            id: profile_id,
+            name: "Old Name".to_owned(),
+            mode: "bidirectional".to_owned(),
+            delete_propagation: false,
+            conflict_policy: "newer_wins".to_owned(),
+            peer_name: "PeerB".to_owned(),
+            created_at: "2026-06-14T10:00:00Z".to_owned(),
+            updated_at: "2026-06-14T10:00:00Z".to_owned(),
+            version: 1,
+            peer_id: instance_b_id.to_string(),
+            origin_instance_id: instance_a_id.to_string(),
+            pending_deletion: false,
+        };
+        let old_anchors = vec![AnchorRow {
+            id: 0,
+            profile_id,
+            local_path: "/Users/alice/Photos".to_owned(),
+            remote_path: "/Users/bob/Backup/Photos".to_owned(),
+            max_depth: -1,
+            include_hidden: false,
+            ignore_patterns: vec![".DS_Store".to_owned()],
+        }];
+
+        drop(db_b);
+
+        let tcp_listener =
+            tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+                .await
+                .unwrap();
+        let server_addr = tcp_listener.local_addr().unwrap();
+
+        let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
+        let client_config = tls::make_client_config(&peer_a, &a_pinned, false).unwrap();
+
+        let db_path_clone = db_path.clone();
+        let server_handle = tokio::spawn(async move {
+            let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
+            let (tcp, _) = tcp_listener.accept().await.unwrap();
+            let tls = acceptor.accept(tcp).await.unwrap();
+            let handler = SyncHandler::with_db_path(instance_a_id, instance_b_id, db_path_clone);
+            let mut stream = framed(tls);
+            handler.serve(&mut stream).await.unwrap();
+        });
+
+        // A has a DB to receive the conflict response
+        let a_db_dir = TempDir::new().unwrap();
+        let a_db_path = a_db_dir.path().join("a.db");
+        let db_a = Db::open(&a_db_path).unwrap();
+        db_a.insert_profile(&old_profile).unwrap();
+        for anchor in &old_anchors {
+            db_a.insert_anchor(anchor).unwrap();
+        }
+        drop(db_a);
+
+        let a_db_path_clone = a_db_path.clone();
+        let client_handle = tokio::spawn(async move {
+            let connector = TlsConnector::from(client_config);
+            let tcp = TcpStream::connect(server_addr).await.unwrap();
+            let sn = ServerName::try_from("filesync.local").unwrap();
+            let tls = connector.connect(sn, tcp).await.unwrap();
+            let mut stream = framed(tls);
+            let mut req_id = 0u32;
+
+            let accepted = replicate_profile(
+                &mut stream,
+                &mut req_id,
+                &old_profile,
+                &old_anchors,
+                instance_a_id,
+                Some(a_db_path_clone.as_path()),
+            )
+            .await
+            .unwrap();
+
+            assert!(!accepted, "peer should reject stale version");
+            a_db_path_clone
+        });
+
+        let (srv, cli) = tokio::join!(server_handle, client_handle);
+        srv.unwrap();
+        let a_db_path_final = cli.unwrap();
+
+        // Verify A's database was updated with B's newer version
+        let db_a = Db::open(&a_db_path_final).unwrap();
+        let updated = db_a.get_profile(profile_id).unwrap().unwrap();
+        assert_eq!(updated.version, 3);
+        assert_eq!(updated.name, "Newer Name");
+    }
+}
+
+/// Profile tombstone delivered: A deletes profile, B marks pending_deletion.
+#[tokio::test]
+async fn e2e_profile_tombstone_delivered() {
+    let peer_a = Identity::generate().unwrap();
+    let peer_b = Identity::generate().unwrap();
+
+    let a_pinned = vec![peer_b.cert_der.clone()];
+    let b_pinned = vec![peer_a.cert_der.clone()];
+
+    let instance_a_id = peer_a.id;
+    let instance_b_id = peer_b.id;
+
+    let profile_id = Uuid::new_v4();
+
+    // B has the profile
+    let db_dir = TempDir::new().unwrap();
+    let db_path = db_dir.path().join("b.db");
+    {
+        let db_b = Db::open(&db_path).unwrap();
+        let profile = ProfileRow {
+            id: profile_id,
+            name: "Doomed Profile".to_owned(),
+            mode: "push".to_owned(),
+            delete_propagation: false,
+            conflict_policy: "newer_wins".to_owned(),
+            peer_name: "PeerA".to_owned(),
+            created_at: "2026-06-14T10:00:00Z".to_owned(),
+            updated_at: "2026-06-14T10:00:00Z".to_owned(),
+            version: 1,
+            peer_id: instance_a_id.to_string(),
+            origin_instance_id: instance_a_id.to_string(),
+            pending_deletion: false,
+        };
+        db_b.insert_profile(&profile).unwrap();
+        drop(db_b);
+    }
+
+    // A has the tombstone queued
+    let a_db_dir = TempDir::new().unwrap();
+    let a_db_path = a_db_dir.path().join("a.db");
+    {
+        let db_a = Db::open(&a_db_path).unwrap();
+        db_a.insert_profile_tombstone(profile_id, "2026-06-15T08:00:00Z").unwrap();
+        drop(db_a);
+    }
+
+    let tcp_listener =
+        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+            .await
+            .unwrap();
+    let server_addr = tcp_listener.local_addr().unwrap();
+
+    let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
+    let client_config = tls::make_client_config(&peer_a, &a_pinned, false).unwrap();
+
+    let db_path_clone = db_path.clone();
+    let server_handle = tokio::spawn(async move {
+        let acceptor = tokio_rustls::TlsAcceptor::from(server_config);
+        let (tcp, _) = tcp_listener.accept().await.unwrap();
+        let tls = acceptor.accept(tcp).await.unwrap();
+        let handler = SyncHandler::with_db_path(instance_a_id, instance_b_id, db_path_clone);
+        let mut stream = framed(tls);
+        handler.serve(&mut stream).await.unwrap();
+    });
+
+    let a_db_path_clone = a_db_path.clone();
+    let client_handle = tokio::spawn(async move {
+        let connector = TlsConnector::from(client_config);
+        let tcp = TcpStream::connect(server_addr).await.unwrap();
+        let sn = ServerName::try_from("filesync.local").unwrap();
+        let tls = connector.connect(sn, tcp).await.unwrap();
+        let mut stream = framed(tls);
+        let mut req_id = 0u32;
+
+        let delivered = deliver_tombstones(&mut stream, &mut req_id, &a_db_path_clone).await.unwrap();
+        assert_eq!(delivered, 1);
+    });
+
+    let (srv, cli) = tokio::join!(server_handle, client_handle);
+    srv.unwrap();
+    cli.unwrap();
+
+    // B should have the profile marked as pending_deletion
+    let db_b = Db::open(&db_path).unwrap();
+    let loaded = db_b.get_profile(profile_id).unwrap().unwrap();
+    assert!(loaded.pending_deletion);
+
+    // And it should NOT appear in list_profiles
+    let all = db_b.list_profiles().unwrap();
+    assert!(all.is_empty());
+
+    // Tombstone should be marked as delivered on A's side
+    let db_a = Db::open(&a_db_path).unwrap();
+    let remaining = db_a.list_undelivered_tombstones().unwrap();
+    assert!(remaining.is_empty());
+}
+
+/// Wire format round-trip: profile_to_wire → wire_to_profile preserves data with correct path flip.
+#[test]
+fn wire_profile_roundtrip_path_mapping() {
+    let instance_a = Uuid::new_v4();
+    let instance_b = Uuid::new_v4();
+
+    let profile_id = Uuid::new_v4();
+    let profile = ProfileRow {
+        id: profile_id,
+        name: "Test".to_owned(),
+        mode: "bidirectional".to_owned(),
+        delete_propagation: true,
+        conflict_policy: "keep_both".to_owned(),
+        peer_name: "Peer".to_owned(),
+        created_at: String::new(),
+        updated_at: "2026-06-14T10:00:00Z".to_owned(),
+        version: 5,
+        peer_id: instance_b.to_string(),
+        origin_instance_id: instance_a.to_string(),
+        pending_deletion: false,
+    };
+    let anchors = vec![AnchorRow {
+        id: 0,
+        profile_id,
+        local_path: "/Users/alice/Docs".to_owned(),
+        remote_path: "/Users/bob/Shared".to_owned(),
+        max_depth: 2,
+        include_hidden: true,
+        ignore_patterns: vec!["*.tmp".to_owned()],
+    }];
+
+    // A serializes to wire (A is origin)
+    let wire = profile_to_wire(&profile, &anchors, instance_a);
+    assert_eq!(wire.origin_instance_id, instance_a);
+    assert_eq!(wire.anchors[0].side_a_path, "/Users/alice/Docs");
+    assert_eq!(wire.anchors[0].side_b_path, "/Users/bob/Shared");
+
+    // B deserializes (B is NOT origin)
+    let (row_b, anchors_b) = wire_to_profile(&wire, instance_b);
+    assert_eq!(row_b.name, "Test");
+    assert_eq!(row_b.version, 5);
+    // B's local_path is side_b (its path), remote_path is side_a (A's path)
+    assert_eq!(anchors_b[0].local_path, "/Users/bob/Shared");
+    assert_eq!(anchors_b[0].remote_path, "/Users/alice/Docs");
+    assert_eq!(anchors_b[0].max_depth, 2);
+    assert!(anchors_b[0].include_hidden);
+    assert_eq!(anchors_b[0].ignore_patterns, vec!["*.tmp"]);
+
+    // B re-serializes back to wire (B is NOT origin, so it should reconstruct correctly)
+    let wire2 = profile_to_wire(&row_b, &anchors_b, instance_b);
+    assert_eq!(wire2.origin_instance_id, instance_a); // origin preserved
+    assert_eq!(wire2.anchors[0].side_a_path, "/Users/alice/Docs");
+    assert_eq!(wire2.anchors[0].side_b_path, "/Users/bob/Shared");
 }

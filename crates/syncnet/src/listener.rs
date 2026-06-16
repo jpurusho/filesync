@@ -103,6 +103,7 @@ impl PeerListener {
                             // Route to sync handler
                             let handler = SyncHandler::new(
                                 peer_id.unwrap_or(Uuid::nil()),
+                                identity.id,
                             );
                             let mut stream = framed(tls_stream);
                             if let Err(e) = handler.serve(&mut stream).await {

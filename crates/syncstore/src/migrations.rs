@@ -105,6 +105,21 @@ CREATE INDEX idx_quick_send_peer ON quick_send_records(peer_id, started_at);
 UPDATE meta SET value = '6' WHERE key = 'schema_version';
 ";
 
+const PROFILE_REPLICATION: &str = r"
+ALTER TABLE profiles ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE profiles ADD COLUMN peer_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN origin_instance_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE profiles ADD COLUMN pending_deletion INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE profile_tombstones (
+    profile_id TEXT PRIMARY KEY NOT NULL,
+    deleted_at TEXT NOT NULL,
+    delivered INTEGER NOT NULL DEFAULT 0
+);
+
+UPDATE meta SET value = '7' WHERE key = 'schema_version';
+";
+
 #[must_use]
 pub fn get_migrations() -> Migrations<'static> {
     Migrations::new(vec![
@@ -114,5 +129,6 @@ pub fn get_migrations() -> Migrations<'static> {
         M::up(RUN_RECORDS),
         M::up(PEERS),
         M::up(QUICK_SEND_RECORDS),
+        M::up(PROFILE_REPLICATION),
     ])
 }

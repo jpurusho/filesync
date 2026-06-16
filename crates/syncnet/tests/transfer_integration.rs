@@ -39,7 +39,7 @@ async fn push_transfers_files_to_remote() {
 
     // Spawn handler (responder)
     let handler_handle = tokio::spawn(async move {
-        let handler = SyncHandler::new(peer_id);
+        let handler = SyncHandler::new(peer_id, Uuid::new_v4());
         let mut stream = framed(server_io);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -100,7 +100,7 @@ async fn pull_transfers_files_from_remote() {
 
     // Spawn handler
     let handler_handle = tokio::spawn(async move {
-        let handler = SyncHandler::new(peer_id);
+        let handler = SyncHandler::new(peer_id, Uuid::new_v4());
         let mut stream = framed(server_io);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -158,7 +158,7 @@ async fn push_only_transfers_changed_files() {
         let remote_path = remote_dir.path().to_str().unwrap().to_owned();
 
         let handler_handle = tokio::spawn(async move {
-            let handler = SyncHandler::new(peer_id);
+            let handler = SyncHandler::new(peer_id, Uuid::new_v4());
             let mut stream = framed(server_io);
             handler.serve(&mut stream).await.unwrap();
         });
@@ -191,7 +191,7 @@ async fn push_only_transfers_changed_files() {
     let remote_path = remote_dir.path().to_str().unwrap().to_owned();
 
     let handler_handle = tokio::spawn(async move {
-        let handler = SyncHandler::new(peer_id);
+        let handler = SyncHandler::new(peer_id, Uuid::new_v4());
         let mut stream = framed(server_io);
         handler.serve(&mut stream).await.unwrap();
     });
@@ -250,7 +250,7 @@ async fn push_invalid_anchor_is_rejected() {
     let (client_io, server_io) = duplex(1024 * 1024);
 
     let handler_handle = tokio::spawn(async move {
-        let handler = SyncHandler::new(peer_id);
+        let handler = SyncHandler::new(peer_id, Uuid::new_v4());
         let mut stream = framed(server_io);
         // Handler will return error for nonexistent path
         let _ = handler.serve(&mut stream).await;

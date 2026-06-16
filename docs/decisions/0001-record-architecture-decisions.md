@@ -1,11 +1,11 @@
 # 0001 — Record architecture decisions in this directory
 
 **Status:** accepted
-**Date:** 2026-06-12
+**Date:** 2026-06-16
 
 ## Context
 
-Conversation context is ephemeral and expensive to replay every session. Re-deriving architectural choices each time is the largest avoidable token cost on this project, and it risks drift if the user and Claude reach different conclusions in different sessions.
+Conversation context is ephemeral and expensive to replay every session. Re-deriving architectural choices each time is the largest avoidable token cost on a project, and it risks drift if the user and Claude reach different conclusions in different sessions.
 
 ## Decision
 
@@ -13,7 +13,7 @@ All non-obvious design decisions, schema choices, protocol changes, trade-offs, 
 
 Format: numbered sequentially, kebab-case slug, three sections (Context, Decision, Consequences). Aim for ~30 lines or fewer.
 
-Spec-level changes (requirements, behavior, acceptance criteria) go in `FileSync_Requirements_Spec.md` instead. ADRs are for the *how*, the spec is for the *what*.
+Spec-level changes (requirements, behavior, acceptance criteria) go in the spec file. ADRs are for the *how*, the spec is for the *what*.
 
 ## Consequences
 

@@ -27,6 +27,7 @@ tokio-util.workspace = true
 bytes.workspace = true
 walkdir.workspace = true
 synccore = { path = "../synccore" }
+syncstore = { path = "../syncstore" }
 futures-util = { workspace = true }
 
 [dev-dependencies]
@@ -34,3 +35,4 @@ tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util", "macros"] }
 rustls.workspace = true
 tokio-rustls.workspace = true
+syncstore = { path = "../syncstore" }

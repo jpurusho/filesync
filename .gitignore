@@ -23,3 +23,6 @@ src-tauri/target/
 # OS
 .DS_Store
 Thumbs.db
+.claude/token_usage.log
+scripts/token_cost.py
+# .claude/state/

@@ -19,6 +19,10 @@ fn sample_profile() -> ProfileRow {
         peer_name: "MacBook".to_owned(),
         created_at: String::new(),
         updated_at: String::new(),
+        version: 1,
+        peer_id: Uuid::new_v4().to_string(),
+        origin_instance_id: Uuid::new_v4().to_string(),
+        pending_deletion: false,
     }
 }
 

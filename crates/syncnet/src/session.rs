@@ -11,12 +11,15 @@ use synccore::plan;
 use synccore::reconcile::{self, Action, ConflictPolicy, ReconcileContext, Side, SyncMode};
 use synccore::scan::{self, EntryKind, ScanConfig, Snapshot};
 
-use crate::handler::atomic_write_file;
+use crate::handler::{atomic_write_file, profile_to_wire, wire_to_profile};
 use crate::rpc::{
-    AnchorSpec, RpcBody, RpcRequest, RpcResponse, decode_message, encode_request,
+    AnchorSpec, RpcBody, RpcRequest, RpcResponse, WireProfile, WireProfileSummary,
+    decode_message, encode_request,
 };
 use crate::transport::{Frame, FramedStream, MessageType};
 use crate::Error;
+
+use syncstore::profiles::{AnchorRow, ProfileRow};
 
 const FILE_CHUNK_SIZE: usize = 256 * 1024; // 256 KiB
 
@@ -1082,4 +1085,174 @@ pub async fn quick_send<S: AsyncRead + AsyncWrite + Unpin>(
         files_sent,
         bytes_sent,
     })
+}
+
+// --- Profile replication (FR-PS) ---
+
+/// Replicate a profile to the peer during a sync session.
+/// Returns Ok(true) if the peer accepted, Ok(false) if the peer had a newer version
+/// (in which case the local profile is updated via db_path), or Err on transport failure.
+pub async fn replicate_profile<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut FramedStream<S>,
+    req_id: &mut u32,
+    profile: &ProfileRow,
+    anchors: &[AnchorRow],
+    instance_id: Uuid,
+    db_path: Option<&std::path::Path>,
+) -> Result<bool, Error> {
+    let wire = profile_to_wire(profile, anchors, instance_id);
+
+    *req_id += 1;
+    send_request(stream, *req_id, RpcRequest::ReplicateProfile { profile: wire }).await?;
+
+    let frame = stream
+        .next()
+        .await
+        .ok_or_else(|| Error::Rpc("connection closed".to_owned()))?
+        .map_err(|e| Error::Transport(format!("recv: {e}")))?;
+
+    if frame.msg_type != MessageType::RpcResponse {
+        return Err(Error::Rpc(format!(
+            "expected RpcResponse, got {:?}",
+            frame.msg_type
+        )));
+    }
+
+    let msg = decode_message(&frame.payload)?;
+    match msg.body {
+        RpcBody::Response(RpcResponse::ProfileAccepted) => Ok(true),
+        RpcBody::Response(RpcResponse::ProfileConflict { local_version }) => {
+            if let Some(path) = db_path {
+                if let Ok(db) = syncstore::Db::open(path) {
+                    let (row, new_anchors) = wire_to_profile(&local_version, instance_id);
+                    let _ = db.delete_anchors_for_profile(row.id);
+                    let _ = db.update_profile(&row);
+                    for anchor in &new_anchors {
+                        let _ = db.insert_anchor(anchor);
+                    }
+                    info!(
+                        profile_id = %row.id,
+                        new_version = local_version.version,
+                        "updated local profile from peer's newer version"
+                    );
+                }
+            }
+            Ok(false)
+        }
+        RpcBody::Response(RpcResponse::Error { code, message }) => {
+            Err(Error::Rpc(format!("replicate profile error ({code:?}): {message}")))
+        }
+        _ => Err(Error::Rpc("unexpected response to ReplicateProfile".to_owned())),
+    }
+}
+
+/// Send undelivered profile tombstones to the peer.
+/// Opens the DB at `db_path` to read tombstones and mark them delivered.
+pub async fn deliver_tombstones<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut FramedStream<S>,
+    req_id: &mut u32,
+    db_path: &std::path::Path,
+) -> Result<u32, Error> {
+    let db = syncstore::Db::open(db_path)
+        .map_err(|e| Error::Session(format!("open db: {e}")))?;
+
+    let tombstones = db
+        .list_undelivered_tombstones()
+        .map_err(|e| Error::Session(format!("load tombstones: {e}")))?;
+
+    drop(db); // Release before async I/O
+
+    let mut delivered = 0u32;
+    for (profile_id, deleted_at) in &tombstones {
+        *req_id += 1;
+        send_request(
+            stream,
+            *req_id,
+            RpcRequest::ProfileDeleted {
+                profile_id: *profile_id,
+                deleted_at: deleted_at.clone(),
+            },
+        )
+        .await?;
+        expect_ok(stream).await?;
+
+        // Re-open briefly to mark delivered
+        if let Ok(db) = syncstore::Db::open(db_path) {
+            let _ = db.mark_tombstone_delivered(*profile_id);
+        }
+        delivered += 1;
+    }
+
+    if delivered > 0 {
+        info!(count = delivered, "delivered profile tombstones");
+    }
+    Ok(delivered)
+}
+
+/// Query the peer for profiles that target this instance (FR-PS-1).
+pub async fn list_peer_profiles<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut FramedStream<S>,
+    req_id: &mut u32,
+) -> Result<Vec<WireProfileSummary>, Error> {
+    *req_id += 1;
+    send_request(stream, *req_id, RpcRequest::ListProfiles).await?;
+
+    let frame = stream
+        .next()
+        .await
+        .ok_or_else(|| Error::Rpc("connection closed".to_owned()))?
+        .map_err(|e| Error::Transport(format!("recv: {e}")))?;
+
+    if frame.msg_type != MessageType::RpcResponse {
+        return Err(Error::Rpc(format!(
+            "expected RpcResponse, got {:?}",
+            frame.msg_type
+        )));
+    }
+
+    let msg = decode_message(&frame.payload)?;
+    match msg.body {
+        RpcBody::Response(RpcResponse::ProfileList { profiles }) => Ok(profiles),
+        RpcBody::Response(RpcResponse::Error { code, message }) => {
+            Err(Error::Rpc(format!("list profiles error ({code:?}): {message}")))
+        }
+        _ => Err(Error::Rpc("expected ProfileList response".to_owned())),
+    }
+}
+
+/// Fetch full profile data from peer by ID.
+pub async fn fetch_peer_profile<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut FramedStream<S>,
+    req_id: &mut u32,
+    profile_id: Uuid,
+) -> Result<WireProfile, Error> {
+    *req_id += 1;
+    send_request(
+        stream,
+        *req_id,
+        RpcRequest::GetProfile { profile_id },
+    )
+    .await?;
+
+    let frame = stream
+        .next()
+        .await
+        .ok_or_else(|| Error::Rpc("connection closed".to_owned()))?
+        .map_err(|e| Error::Transport(format!("recv: {e}")))?;
+
+    if frame.msg_type != MessageType::RpcResponse {
+        return Err(Error::Rpc(format!(
+            "expected RpcResponse, got {:?}",
+            frame.msg_type
+        )));
+    }
+
+    let msg = decode_message(&frame.payload)?;
+    match msg.body {
+        RpcBody::Response(RpcResponse::ProfileData { profile }) => Ok(profile),
+        RpcBody::Response(RpcResponse::Error { code, message }) => {
+            Err(Error::Rpc(format!("get profile error ({code:?}): {message}")))
+        }
+        _ => Err(Error::Rpc("expected ProfileData response".to_owned())),
+    }
 }

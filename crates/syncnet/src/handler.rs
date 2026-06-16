@@ -10,10 +10,13 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use synccore::path::RelPath;
+use synccore::reconcile::{ConflictPolicy, SyncMode};
 use synccore::scan::{self, ScanConfig};
+use syncstore::profiles::{AnchorRow, ProfileRow};
 
 use crate::rpc::{
-    AnchorSpec, ErrorCode, RpcBody, RpcRequest, RpcResponse, decode_message, encode_response,
+    AnchorSpec, ErrorCode, RpcBody, RpcRequest, RpcResponse, WireAnchor, WireProfile,
+    WireProfileSummary, decode_message, encode_response,
 };
 use crate::transport::{Frame, FramedStream, MessageType};
 use crate::Error;
@@ -28,12 +31,30 @@ struct SessionState {
 
 pub struct SyncHandler {
     peer_id: Uuid,
+    instance_id: Uuid,
+    db_path: Option<PathBuf>,
 }
 
 #[allow(clippy::unused_self, clippy::ref_option)]
 impl SyncHandler {
-    pub fn new(peer_id: Uuid) -> Self {
-        Self { peer_id }
+    pub fn new(peer_id: Uuid, instance_id: Uuid) -> Self {
+        Self {
+            peer_id,
+            instance_id,
+            db_path: None,
+        }
+    }
+
+    pub fn with_db_path(peer_id: Uuid, instance_id: Uuid, db_path: PathBuf) -> Self {
+        Self {
+            peer_id,
+            instance_id,
+            db_path: Some(db_path),
+        }
+    }
+
+    fn open_db(&self) -> Option<syncstore::Db> {
+        self.db_path.as_ref().and_then(|p| syncstore::Db::open(p).ok())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -80,7 +101,6 @@ impl SyncHandler {
                             size: _,
                             mtime_secs,
                         } => {
-                            // Two-phase: send OK for the header, receive data, then send final OK/Error
                             let prep = self.put_file_validate(anchor_id, &path, &session);
                             match prep {
                                 Ok(dest_path) => {
@@ -89,7 +109,6 @@ impl SyncHandler {
                                     send_frame(stream, MessageType::RpcResponse, resp_bytes)
                                         .await?;
 
-                                    // Receive file data
                                     let write_result =
                                         self.receive_and_write_file(stream, &dest_path, mtime_secs)
                                             .await;
@@ -113,7 +132,6 @@ impl SyncHandler {
                             }
                         }
                         RpcRequest::GetFiles { anchor_id, paths } => {
-                            // Validate, respond OK, then stream files
                             let validate = self.get_files_validate(anchor_id, &paths, &session);
                             match validate {
                                 Ok(root) => {
@@ -122,7 +140,6 @@ impl SyncHandler {
                                     send_frame(stream, MessageType::RpcResponse, resp_bytes)
                                         .await?;
 
-                                    // Stream each file
                                     for path in &paths {
                                         self.send_file(stream, &root, path).await?;
                                     }
@@ -161,6 +178,26 @@ impl SyncHandler {
                             new_name,
                         } => {
                             let response = self.rename_remote(anchor_id, &path, &new_name, &session);
+                            let resp_bytes = encode_response(req_id, response)?;
+                            send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
+                        }
+                        RpcRequest::ListProfiles => {
+                            let response = self.handle_list_profiles();
+                            let resp_bytes = encode_response(req_id, response)?;
+                            send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
+                        }
+                        RpcRequest::GetProfile { profile_id } => {
+                            let response = self.handle_get_profile(profile_id);
+                            let resp_bytes = encode_response(req_id, response)?;
+                            send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
+                        }
+                        RpcRequest::ReplicateProfile { profile } => {
+                            let response = self.handle_replicate_profile(profile);
+                            let resp_bytes = encode_response(req_id, response)?;
+                            send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
+                        }
+                        RpcRequest::ProfileDeleted { profile_id, deleted_at } => {
+                            let response = self.handle_profile_deleted(profile_id, &deleted_at);
                             let resp_bytes = encode_response(req_id, response)?;
                             send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
                         }
@@ -213,7 +250,11 @@ impl SyncHandler {
             RpcRequest::PutFile { .. }
             | RpcRequest::GetFiles { .. }
             | RpcRequest::QuickSend { .. }
-            | RpcRequest::RenameRemote { .. } => {
+            | RpcRequest::RenameRemote { .. }
+            | RpcRequest::ListProfiles
+            | RpcRequest::GetProfile { .. }
+            | RpcRequest::ReplicateProfile { .. }
+            | RpcRequest::ProfileDeleted { .. } => {
                 RpcResponse::Error {
                     code: ErrorCode::Internal,
                     message: "bug: this RPC is handled in serve loop".to_owned(),
@@ -514,8 +555,6 @@ impl SyncHandler {
         Ok(())
     }
 
-    /// Handle a quick-send transfer (FR-SM-6).
-    /// No session required — just receive files and write atomically.
     async fn handle_quick_send<S: AsyncRead + AsyncWrite + Unpin>(
         &self,
         stream: &mut FramedStream<S>,
@@ -528,7 +567,6 @@ impl SyncHandler {
                 .map_err(|e| Error::Session(format!("create dest dir: {e}")))?;
         }
 
-        // Send OK to signal ready for file data
         let ack_bytes = encode_response(0, RpcResponse::Ok)?;
         send_frame(stream, MessageType::RpcResponse, ack_bytes).await?;
 
@@ -543,7 +581,6 @@ impl SyncHandler {
                 continue;
             }
 
-            // Receive file data
             self.receive_and_write_file(stream, &dest_path, entry.mtime_secs)
                 .await?;
             files_written += 1;
@@ -551,7 +588,323 @@ impl SyncHandler {
 
         Ok(files_written)
     }
+
+    // --- Profile replication handlers (FR-PS) ---
+
+    fn handle_list_profiles(&self) -> RpcResponse {
+        let Some(db) = self.open_db() else {
+            return RpcResponse::ProfileList { profiles: Vec::new() };
+        };
+
+        let profiles = match db.list_profiles_for_peer(self.peer_id) {
+            Ok(p) => p,
+            Err(e) => {
+                return RpcResponse::Error {
+                    code: ErrorCode::Internal,
+                    message: format!("db error: {e}"),
+                };
+            }
+        };
+
+        let summaries: Vec<WireProfileSummary> = profiles
+            .iter()
+            .map(|p| WireProfileSummary {
+                id: p.id,
+                name: p.name.clone(),
+                mode: parse_sync_mode(&p.mode),
+                version: p.version,
+                updated_at: p.updated_at.clone(),
+            })
+            .collect();
+
+        RpcResponse::ProfileList { profiles: summaries }
+    }
+
+    fn handle_get_profile(&self, profile_id: Uuid) -> RpcResponse {
+        let Some(db) = self.open_db() else {
+            return RpcResponse::Error {
+                code: ErrorCode::Internal,
+                message: "no database available".to_owned(),
+            };
+        };
+
+        let profile = match db.get_profile(profile_id) {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return RpcResponse::Error {
+                    code: ErrorCode::NotFound,
+                    message: "profile not found".to_owned(),
+                };
+            }
+            Err(e) => {
+                return RpcResponse::Error {
+                    code: ErrorCode::Internal,
+                    message: format!("db error: {e}"),
+                };
+            }
+        };
+
+        let anchors = match db.get_anchors(profile_id) {
+            Ok(a) => a,
+            Err(e) => {
+                return RpcResponse::Error {
+                    code: ErrorCode::Internal,
+                    message: format!("db error loading anchors: {e}"),
+                };
+            }
+        };
+
+        let wire = profile_to_wire(&profile, &anchors, self.instance_id);
+        RpcResponse::ProfileData { profile: wire }
+    }
+
+    fn handle_replicate_profile(&self, incoming: WireProfile) -> RpcResponse {
+        let Some(db) = self.open_db() else {
+            return RpcResponse::ProfileAccepted;
+        };
+
+        let existing = match db.get_profile(incoming.id) {
+            Ok(p) => p,
+            Err(e) => {
+                return RpcResponse::Error {
+                    code: ErrorCode::Internal,
+                    message: format!("db error: {e}"),
+                };
+            }
+        };
+
+        match existing {
+            None => {
+                // New profile — insert with paths mapped to our perspective
+                let (row, anchors) = wire_to_profile(&incoming, self.instance_id);
+                if let Err(e) = db.insert_profile(&row) {
+                    return RpcResponse::Error {
+                        code: ErrorCode::Internal,
+                        message: format!("insert profile: {e}"),
+                    };
+                }
+                for anchor in &anchors {
+                    if let Err(e) = db.insert_anchor(anchor) {
+                        return RpcResponse::Error {
+                            code: ErrorCode::Internal,
+                            message: format!("insert anchor: {e}"),
+                        };
+                    }
+                }
+                info!(profile_id = %incoming.id, version = incoming.version, "accepted new profile");
+                RpcResponse::ProfileAccepted
+            }
+            Some(local) => {
+                if incoming.version > local.version {
+                    // Incoming is newer — update local
+                    let (row, anchors) = wire_to_profile(&incoming, self.instance_id);
+                    if let Err(e) = db.delete_anchors_for_profile(row.id) {
+                        return RpcResponse::Error {
+                            code: ErrorCode::Internal,
+                            message: format!("clear anchors: {e}"),
+                        };
+                    }
+                    if let Err(e) = db.update_profile(&row) {
+                        return RpcResponse::Error {
+                            code: ErrorCode::Internal,
+                            message: format!("update profile: {e}"),
+                        };
+                    }
+                    for anchor in &anchors {
+                        if let Err(e) = db.insert_anchor(anchor) {
+                            return RpcResponse::Error {
+                                code: ErrorCode::Internal,
+                                message: format!("insert anchor: {e}"),
+                            };
+                        }
+                    }
+                    info!(
+                        profile_id = %incoming.id,
+                        incoming_version = incoming.version,
+                        local_version = local.version,
+                        "accepted newer profile version"
+                    );
+                    RpcResponse::ProfileAccepted
+                } else if incoming.version < local.version {
+                    // Local is newer — tell initiator to update
+                    let local_anchors = match db.get_anchors(local.id) {
+                        Ok(a) => a,
+                        Err(e) => {
+                            return RpcResponse::Error {
+                                code: ErrorCode::Internal,
+                                message: format!("db error: {e}"),
+                            };
+                        }
+                    };
+                    let local_wire = profile_to_wire(&local, &local_anchors, self.instance_id);
+                    info!(
+                        profile_id = %incoming.id,
+                        incoming_version = incoming.version,
+                        local_version = local.version,
+                        "rejected: local version is newer"
+                    );
+                    RpcResponse::ProfileConflict {
+                        local_version: local_wire,
+                    }
+                } else {
+                    // Same version — no-op
+                    RpcResponse::ProfileAccepted
+                }
+            }
+        }
+    }
+
+    fn handle_profile_deleted(&self, profile_id: Uuid, deleted_at: &str) -> RpcResponse {
+        let Some(db) = self.open_db() else {
+            return RpcResponse::Ok;
+        };
+
+        // Mark as pending deletion rather than hard-deleting
+        match db.get_profile(profile_id) {
+            Ok(Some(mut profile)) => {
+                profile.pending_deletion = true;
+                if let Err(e) = db.update_profile(&profile) {
+                    return RpcResponse::Error {
+                        code: ErrorCode::Internal,
+                        message: format!("mark pending deletion: {e}"),
+                    };
+                }
+                info!(profile_id = %profile_id, deleted_at, "profile marked as pending deletion");
+                RpcResponse::Ok
+            }
+            Ok(None) => RpcResponse::Ok,
+            Err(e) => RpcResponse::Error {
+                code: ErrorCode::Internal,
+                message: format!("db error: {e}"),
+            },
+        }
+    }
 }
+
+// --- Conversion helpers ---
+
+/// Convert a local ProfileRow + anchors into a WireProfile for sending to a peer.
+/// `local_instance_id` is this instance's UUID — it becomes the origin in the wire format.
+pub fn profile_to_wire(
+    profile: &ProfileRow,
+    anchors: &[AnchorRow],
+    local_instance_id: Uuid,
+) -> WireProfile {
+    let origin = Uuid::parse_str(&profile.origin_instance_id).unwrap_or(local_instance_id);
+
+    let wire_anchors: Vec<WireAnchor> = anchors
+        .iter()
+        .map(|a| {
+            // If we are the origin instance, local_path is side_a; otherwise it's side_b
+            if origin == local_instance_id {
+                WireAnchor {
+                    side_a_path: a.local_path.clone(),
+                    side_b_path: a.remote_path.clone(),
+                    max_depth: a.max_depth,
+                    include_hidden: a.include_hidden,
+                    ignore_patterns: a.ignore_patterns.clone(),
+                }
+            } else {
+                WireAnchor {
+                    side_a_path: a.remote_path.clone(),
+                    side_b_path: a.local_path.clone(),
+                    max_depth: a.max_depth,
+                    include_hidden: a.include_hidden,
+                    ignore_patterns: a.ignore_patterns.clone(),
+                }
+            }
+        })
+        .collect();
+
+    WireProfile {
+        id: profile.id,
+        name: profile.name.clone(),
+        mode: parse_sync_mode(&profile.mode),
+        delete_propagation: profile.delete_propagation,
+        conflict_policy: parse_conflict_policy(&profile.conflict_policy),
+        version: profile.version,
+        updated_at: profile.updated_at.clone(),
+        origin_instance_id: origin,
+        anchors: wire_anchors,
+    }
+}
+
+/// Convert a WireProfile received from a peer into a local ProfileRow + anchors.
+/// `local_instance_id` is this instance's UUID — used to determine which side of the
+/// path mapping is "local" to us.
+pub fn wire_to_profile(wire: &WireProfile, local_instance_id: Uuid) -> (ProfileRow, Vec<AnchorRow>) {
+    let i_am_origin = wire.origin_instance_id == local_instance_id;
+
+    let row = ProfileRow {
+        id: wire.id,
+        name: wire.name.clone(),
+        mode: sync_mode_to_str(wire.mode).to_owned(),
+        delete_propagation: wire.delete_propagation,
+        conflict_policy: conflict_policy_to_str(wire.conflict_policy).to_owned(),
+        peer_name: String::new(),
+        created_at: String::new(),
+        updated_at: wire.updated_at.clone(),
+        version: wire.version,
+        peer_id: String::new(), // Caller should fill in the peer's UUID
+        origin_instance_id: wire.origin_instance_id.to_string(),
+        pending_deletion: false,
+    };
+
+    let anchors: Vec<AnchorRow> = wire
+        .anchors
+        .iter()
+        .map(|wa| {
+            let (local_path, remote_path) = if i_am_origin {
+                (wa.side_a_path.clone(), wa.side_b_path.clone())
+            } else {
+                (wa.side_b_path.clone(), wa.side_a_path.clone())
+            };
+            AnchorRow {
+                id: 0,
+                profile_id: wire.id,
+                local_path,
+                remote_path,
+                max_depth: wa.max_depth,
+                include_hidden: wa.include_hidden,
+                ignore_patterns: wa.ignore_patterns.clone(),
+            }
+        })
+        .collect();
+
+    (row, anchors)
+}
+
+fn parse_sync_mode(s: &str) -> SyncMode {
+    match s {
+        "push" => SyncMode::Push,
+        "pull" => SyncMode::Pull,
+        _ => SyncMode::Bidirectional,
+    }
+}
+
+fn parse_conflict_policy(s: &str) -> ConflictPolicy {
+    match s {
+        "keep_both" => ConflictPolicy::KeepBoth,
+        _ => ConflictPolicy::NewerWins,
+    }
+}
+
+fn sync_mode_to_str(mode: SyncMode) -> &'static str {
+    match mode {
+        SyncMode::Push => "push",
+        SyncMode::Pull => "pull",
+        SyncMode::Bidirectional => "bidirectional",
+    }
+}
+
+fn conflict_policy_to_str(policy: ConflictPolicy) -> &'static str {
+    match policy {
+        ConflictPolicy::NewerWins => "newer_wins",
+        ConflictPolicy::KeepBoth => "keep_both",
+    }
+}
+
+// --- Frame / file utilities ---
 
 async fn send_frame<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut FramedStream<S>,

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use synccore::path::RelPath;
-use synccore::reconcile::SyncMode;
+use synccore::reconcile::{ConflictPolicy, SyncMode};
 use synccore::scan::{ScanConfig, Snapshot};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +64,21 @@ pub enum RpcRequest {
         path: RelPath,
         new_name: String,
     },
+    /// List profiles that target the requesting peer (FR-PS-1).
+    ListProfiles,
+    /// Get full profile config by ID.
+    GetProfile {
+        profile_id: Uuid,
+    },
+    /// Replicate a profile to the peer (sent during StartSession or standalone).
+    ReplicateProfile {
+        profile: WireProfile,
+    },
+    /// Notify peer that a profile has been deleted.
+    ProfileDeleted {
+        profile_id: Uuid,
+        deleted_at: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +106,20 @@ pub enum RpcResponse {
         transfer_id: Uuid,
         files_written: u64,
     },
+    /// Response to ListProfiles.
+    ProfileList {
+        profiles: Vec<WireProfileSummary>,
+    },
+    /// Response to GetProfile.
+    ProfileData {
+        profile: WireProfile,
+    },
+    /// Response to ReplicateProfile when local version is newer.
+    ProfileConflict {
+        local_version: WireProfile,
+    },
+    /// Response to ReplicateProfile when accepted.
+    ProfileAccepted,
     Error {
         code: ErrorCode,
         message: String,
@@ -101,6 +130,39 @@ pub enum RpcResponse {
 pub struct AnchorSpec {
     pub id: Uuid,
     pub remote_path: String,
+}
+
+/// Wire format for profile replication (FR-PS-2).
+/// Uses neutral path naming: side_a is origin instance, side_b is peer.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WireProfile {
+    pub id: Uuid,
+    pub name: String,
+    pub mode: SyncMode,
+    pub delete_propagation: bool,
+    pub conflict_policy: ConflictPolicy,
+    pub version: u64,
+    pub updated_at: String,
+    pub origin_instance_id: Uuid,
+    pub anchors: Vec<WireAnchor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WireAnchor {
+    pub side_a_path: String,  // path on origin instance
+    pub side_b_path: String,  // path on peer
+    pub max_depth: i32,
+    pub include_hidden: bool,
+    pub ignore_patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WireProfileSummary {
+    pub id: Uuid,
+    pub name: String,
+    pub mode: SyncMode,
+    pub version: u64,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
