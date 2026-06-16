@@ -3,15 +3,19 @@
 **Status:** in progress
 **Owner model:** Sonnet (mechanical UI wiring) with Opus for state design review
 
+## Prerequisites
+
+Before building, install dependencies:
+```bash
+cd ui && npm install
+```
+
 ## Progress
 
 ### ✅ Completed (2026-06-16)
 - Step 1: Tauri command layer (all basic commands wired)
 - Step 2: Frontend foundation (Zustand store, TabBar, pages structure)
-- Step 3: Profiles UI (list view, basic card display, delete)
-
-### 🚧 In Progress
-- Step 3: Profile editor (create/update form with anchors)
+- Step 3: Profiles UI (list view, card display, delete, create/edit form with anchors)
 
 ### ⏸️ Remaining
 - Step 4: Peers UI (pairing flow - needs protocol integration)

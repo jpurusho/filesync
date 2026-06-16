@@ -25,7 +25,7 @@ interface AppState {
   setActiveTab: (tab: "profiles" | "peers" | "activity") => void;
 }
 
-export const useStore = create<AppState>((set, get) => ({
+export const useStore = create<AppState>((set) => ({
   // Profiles
   profiles: [],
   loadingProfiles: false,
@@ -61,7 +61,7 @@ export const useStore = create<AppState>((set, get) => ({
   fetchSyncStatus: async (profileId: string) => {
     try {
       const status = await commands.getSyncStatus(profileId);
-      set((state) => ({
+      set((state: AppState) => ({
         syncStatuses: { ...state.syncStatuses, [profileId]: status },
       }));
     } catch (error) {
@@ -82,5 +82,5 @@ export const useStore = create<AppState>((set, get) => ({
 
   // UI state
   activeTab: "profiles",
-  setActiveTab: (tab) => set({ activeTab: tab }),
+  setActiveTab: (tab: "profiles" | "peers" | "activity") => set({ activeTab: tab }),
 }));

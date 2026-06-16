@@ -1,8 +1,7 @@
-import { invoke as tauriInvoke, listen as tauriListen } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 
 // Re-export with better typing
 export const invoke = tauriInvoke;
-export const listen = tauriListen;
 
 // Type definitions for our commands
 export interface ProfileView {

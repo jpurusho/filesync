@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "../store";
+import { PeerView } from "../lib/tauri";
 
 export function PeersPage() {
   const { peers, loadingPeers, fetchPeers } = useStore();
@@ -34,7 +35,7 @@ export function PeersPage() {
         </div>
       ) : (
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {peers.map((peer) => (
+          {peers.map((peer: PeerView) => (
             <div
               key={peer.id}
               className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
