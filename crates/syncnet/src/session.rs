@@ -51,6 +51,7 @@ pub struct RemoteSyncResult {
 }
 
 /// Run a push sync: initiator sends files to responder.
+#[allow(clippy::too_many_lines)]
 pub async fn run_remote_push<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut FramedStream<S>,
     config: &RemoteSyncConfig,

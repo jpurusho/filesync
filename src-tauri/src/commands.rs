@@ -1,5 +1,5 @@
 use crate::views::{
-    AnchorInput, AnchorView, DriftSummary, PeerView, ProfileDetail, ProfileInput, ProfileView,
+    AnchorView, DriftSummary, PeerView, ProfileDetail, ProfileInput, ProfileView,
     SyncStatus,
 };
 use std::sync::Mutex;
@@ -11,6 +11,7 @@ type DbState<'a> = State<'a, Mutex<Db>>;
 
 /// List all active profiles (excluding pending deletions)
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn list_profiles(db: DbState) -> Result<Vec<ProfileView>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let profiles = db.list_profiles().map_err(|e| e.to_string())?;
@@ -33,6 +34,7 @@ pub fn list_profiles(db: DbState) -> Result<Vec<ProfileView>, String> {
 
 /// Get full profile detail including anchors
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn get_profile(id: String, db: DbState) -> Result<ProfileDetail, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
@@ -73,6 +75,7 @@ pub fn get_profile(id: String, db: DbState) -> Result<ProfileDetail, String> {
 
 /// Create a new profile
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn create_profile(input: ProfileInput, db: DbState) -> Result<ProfileView, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let id = Uuid::new_v4();
@@ -124,6 +127,7 @@ pub fn create_profile(input: ProfileInput, db: DbState) -> Result<ProfileView, S
 
 /// Update an existing profile
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<ProfileView, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
@@ -182,6 +186,7 @@ pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<Pr
 
 /// Delete a profile and queue tombstone
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn delete_profile(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
@@ -203,6 +208,7 @@ pub fn delete_profile(id: String, db: DbState) -> Result<(), String> {
 
 /// List all paired peers
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn list_peers(db: DbState) -> Result<Vec<PeerView>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let peers = db.list_peers().map_err(|e| e.to_string())?;
@@ -222,6 +228,7 @@ pub fn list_peers(db: DbState) -> Result<Vec<PeerView>, String> {
 
 /// List profiles pending deletion (for prompt)
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn list_pending_deletions(db: DbState) -> Result<Vec<ProfileView>, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let profiles = db.list_pending_deletions().map_err(|e| e.to_string())?;
@@ -244,6 +251,7 @@ pub fn list_pending_deletions(db: DbState) -> Result<Vec<ProfileView>, String> {
 
 /// Confirm deletion of a pending profile
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
@@ -257,6 +265,7 @@ pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
 
 /// Reject deletion and restore profile to active state
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn reject_deletion(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
@@ -268,6 +277,7 @@ pub fn reject_deletion(id: String, db: DbState) -> Result<(), String> {
 
 /// Get sync status for a profile (stub for now)
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn get_sync_status(profile_id: String, _db: DbState) -> SyncStatus {
     // TODO: Implement actual status tracking via runs table
     SyncStatus {
@@ -282,6 +292,7 @@ pub fn get_sync_status(profile_id: String, _db: DbState) -> SyncStatus {
 
 /// Get drift summary for a profile (stub for now)
 #[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
 pub fn get_drift_summary(profile_id: String, _db: DbState) -> DriftSummary {
     // TODO: Implement actual drift calculation from index
     DriftSummary {

@@ -193,7 +193,7 @@ impl SyncHandler {
                             send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
                         }
                         RpcRequest::ReplicateProfile { profile } => {
-                            let response = self.handle_replicate_profile(profile);
+                            let response = self.handle_replicate_profile(&profile);
                             let resp_bytes = encode_response(req_id, response)?;
                             send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
                         }
@@ -672,7 +672,7 @@ impl SyncHandler {
         RpcResponse::ProfileData { profile: wire }
     }
 
-    fn handle_replicate_profile(&self, incoming: WireProfile) -> RpcResponse {
+    fn handle_replicate_profile(&self, incoming: &WireProfile) -> RpcResponse {
         let Some(db) = self.open_db() else {
             return RpcResponse::ProfileAccepted;
         };
@@ -690,7 +690,7 @@ impl SyncHandler {
         match existing {
             None => {
                 // New profile — insert with paths mapped to our perspective
-                let (row, anchors) = wire_to_profile(&incoming, self.instance_id);
+                let (row, anchors) = wire_to_profile(incoming, self.instance_id);
                 if let Err(e) = db.insert_profile(&row) {
                     return RpcResponse::Error {
                         code: ErrorCode::Internal,
@@ -708,10 +708,10 @@ impl SyncHandler {
                 info!(profile_id = %incoming.id, version = incoming.version, "accepted new profile");
                 RpcResponse::ProfileAccepted
             }
-            Some(local) => {
-                if incoming.version > local.version {
+            Some(local) => match incoming.version.cmp(&local.version) {
+                std::cmp::Ordering::Greater => {
                     // Incoming is newer — update local
-                    let (row, anchors) = wire_to_profile(&incoming, self.instance_id);
+                    let (row, anchors) = wire_to_profile(incoming, self.instance_id);
                     if let Err(e) = db.delete_anchors_for_profile(row.id) {
                         return RpcResponse::Error {
                             code: ErrorCode::Internal,
@@ -739,7 +739,8 @@ impl SyncHandler {
                         "accepted newer profile version"
                     );
                     RpcResponse::ProfileAccepted
-                } else if incoming.version < local.version {
+                }
+                std::cmp::Ordering::Less => {
                     // Local is newer — tell initiator to update
                     let local_anchors = match db.get_anchors(local.id) {
                         Ok(a) => a,
@@ -760,11 +761,12 @@ impl SyncHandler {
                     RpcResponse::ProfileConflict {
                         local_version: local_wire,
                     }
-                } else {
+                }
+                std::cmp::Ordering::Equal => {
                     // Same version — no-op
                     RpcResponse::ProfileAccepted
                 }
-            }
+            },
         }
     }
 

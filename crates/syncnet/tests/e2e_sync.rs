@@ -1,3 +1,7 @@
+#![allow(clippy::similar_names)]
+#![allow(clippy::too_many_lines)]
+#![allow(clippy::unused_async)]
+
 use std::fs;
 use std::net::{Ipv4Addr, SocketAddr};
 
