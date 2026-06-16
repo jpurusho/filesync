@@ -1,7 +1,23 @@
 # M6 — Tauri/React UI
 
-**Status:** planning
+**Status:** in progress
 **Owner model:** Sonnet (mechanical UI wiring) with Opus for state design review
+
+## Progress
+
+### ✅ Completed (2026-06-16)
+- Step 1: Tauri command layer (all basic commands wired)
+- Step 2: Frontend foundation (Zustand store, TabBar, pages structure)
+- Step 3: Profiles UI (list view, basic card display, delete)
+
+### 🚧 In Progress
+- Step 3: Profile editor (create/update form with anchors)
+
+### ⏸️ Remaining
+- Step 4: Peers UI (pairing flow - needs protocol integration)
+- Step 5: Sync & Activity UI (trigger + progress)
+- Step 6: Conflict & deletion UX
+- Step 7: Drift reporting
 
 ## Goal
 
