@@ -3,7 +3,7 @@ use crate::views::{
     SyncStatus,
 };
 use std::sync::Mutex;
-use syncstore::{profiles::ProfileRow, Db};
+use syncstore::{Db, profiles::ProfileRow};
 use tauri::State;
 use uuid::Uuid;
 
@@ -152,7 +152,8 @@ pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<Pr
     db.update_profile(&updated).map_err(|e| e.to_string())?;
 
     // Replace anchors: delete all and re-insert
-    db.delete_anchors_for_profile(uuid).map_err(|e| e.to_string())?;
+    db.delete_anchors_for_profile(uuid)
+        .map_err(|e| e.to_string())?;
     for anchor_input in input.anchors {
         let anchor = syncstore::profiles::AnchorRow {
             id: 0,
@@ -186,7 +187,8 @@ pub fn delete_profile(id: String, db: DbState) -> Result<(), String> {
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
 
     // Delete anchors first (foreign key cascade should handle this, but be explicit)
-    db.delete_anchors_for_profile(uuid).map_err(|e| e.to_string())?;
+    db.delete_anchors_for_profile(uuid)
+        .map_err(|e| e.to_string())?;
 
     // Delete profile
     db.delete_profile(uuid).map_err(|e| e.to_string())?;
@@ -246,7 +248,8 @@ pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
 
-    db.delete_anchors_for_profile(uuid).map_err(|e| e.to_string())?;
+    db.delete_anchors_for_profile(uuid)
+        .map_err(|e| e.to_string())?;
     db.delete_profile(uuid).map_err(|e| e.to_string())?;
 
     Ok(())
@@ -258,8 +261,7 @@ pub fn reject_deletion(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
     let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
 
-    db.clear_pending_deletion(uuid)
-        .map_err(|e| e.to_string())?;
+    db.clear_pending_deletion(uuid).map_err(|e| e.to_string())?;
 
     Ok(())
 }

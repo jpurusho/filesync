@@ -240,17 +240,14 @@ impl Db {
 
     /// List undelivered tombstones.
     pub fn list_undelivered_tombstones(&self) -> Result<Vec<(Uuid, String)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT profile_id, deleted_at FROM profile_tombstones WHERE delivered = 0",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT profile_id, deleted_at FROM profile_tombstones WHERE delivered = 0")?;
 
         let rows = stmt.query_map([], |row| {
             let id_str: String = row.get(0)?;
             let deleted_at: String = row.get(1)?;
-            Ok((
-                Uuid::parse_str(&id_str).unwrap_or_default(),
-                deleted_at,
-            ))
+            Ok((Uuid::parse_str(&id_str).unwrap_or_default(), deleted_at))
         })?;
 
         let mut tombstones = Vec::new();

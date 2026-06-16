@@ -18,8 +18,8 @@ use syncnet::handler::SyncHandler;
 use syncnet::handler::{profile_to_wire, wire_to_profile};
 use syncnet::identity::Identity;
 use syncnet::session::{
-    RemoteAnchor, RemoteSyncConfig, deliver_tombstones, quick_send,
-    replicate_profile, run_remote_bidi, run_remote_push,
+    RemoteAnchor, RemoteSyncConfig, deliver_tombstones, quick_send, replicate_profile,
+    run_remote_bidi, run_remote_push,
 };
 use syncnet::tls;
 use syncnet::transport::framed;
@@ -47,11 +47,9 @@ async fn paired_tls_handshake_succeeds() {
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
     let client_config = tls::make_client_config(&peer_a, &a_pinned, false).unwrap();
 
-    let tcp_listener = tokio::net::TcpListener::bind(
-        SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-    )
-    .await
-    .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_handle = tokio::spawn(async move {
@@ -99,11 +97,9 @@ async fn e2e_push_over_tls() {
     let anchor_id = Uuid::new_v4();
     let profile_id = Uuid::new_v4();
 
-    let tcp_listener = tokio::net::TcpListener::bind(
-        SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-    )
-    .await
-    .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
@@ -187,11 +183,9 @@ async fn unpaired_peer_rejected() {
 
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
 
-    let tcp_listener = tokio::net::TcpListener::bind(
-        SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-    )
-    .await
-    .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_handle = tokio::spawn(async move {
@@ -239,10 +233,9 @@ async fn quick_send_single_file() {
     let dest_path = dest_dir.path().to_str().unwrap().to_owned();
     let source_file = source_dir.path().join("hello.txt");
 
-    let tcp_listener =
-        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-            .await
-            .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
@@ -263,7 +256,10 @@ async fn quick_send_single_file() {
         let connector = TlsConnector::from(client_config);
         let tcp = TcpStream::connect(server_addr).await.unwrap();
         let server_name = ServerName::try_from("filesync.local").unwrap();
-        let tls_stream = connector.connect(server_name.to_owned(), tcp).await.unwrap();
+        let tls_stream = connector
+            .connect(server_name.to_owned(), tcp)
+            .await
+            .unwrap();
         let mut stream = framed(tls_stream);
         quick_send(&mut stream, &source_file, &dest_path).await
     });
@@ -301,10 +297,9 @@ async fn quick_send_directory() {
     let dest_path = dest_dir.path().to_str().unwrap().to_owned();
     let source_path = source_dir.path().to_path_buf();
 
-    let tcp_listener =
-        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-            .await
-            .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
@@ -325,7 +320,10 @@ async fn quick_send_directory() {
         let connector = TlsConnector::from(client_config);
         let tcp = TcpStream::connect(server_addr).await.unwrap();
         let server_name = ServerName::try_from("filesync.local").unwrap();
-        let tls_stream = connector.connect(server_name.to_owned(), tcp).await.unwrap();
+        let tls_stream = connector
+            .connect(server_name.to_owned(), tcp)
+            .await
+            .unwrap();
         let mut stream = framed(tls_stream);
         quick_send(&mut stream, &source_path, &dest_path).await
     });
@@ -350,12 +348,7 @@ async fn quick_send_directory() {
 }
 
 // Helper: build a paired TLS session (server + client) and return temp dirs.
-async fn bidi_session_setup() -> (
-    Identity,
-    Identity,
-    TempDir,
-    TempDir,
-) {
+async fn bidi_session_setup() -> (Identity, Identity, TempDir, TempDir) {
     let peer_a = Identity::generate().unwrap();
     let peer_b = Identity::generate().unwrap();
     let local_dir = TempDir::new().unwrap();
@@ -382,11 +375,9 @@ async fn run_bidi_test(
     let local_path = local_dir.path().to_path_buf();
     let peer_a_id = peer_a.id;
 
-    let tcp_listener = tokio::net::TcpListener::bind(
-        SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-    )
-    .await
-    .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_handle = tokio::spawn(async move {
@@ -435,13 +426,26 @@ async fn e2e_bidi_non_conflicting() {
     fs::write(local_dir.path().join("file_a.txt"), "from A").unwrap();
     fs::write(remote_dir.path().join("file_b.txt"), "from B").unwrap();
 
-    let result = run_bidi_test(peer_a, peer_b, &local_dir, &remote_dir, SyncIndex::default()).await;
+    let result = run_bidi_test(
+        peer_a,
+        peer_b,
+        &local_dir,
+        &remote_dir,
+        SyncIndex::default(),
+    )
+    .await;
 
     assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
     assert_eq!(result.files_transferred, 2);
 
-    assert_eq!(fs::read_to_string(remote_dir.path().join("file_a.txt")).unwrap(), "from A");
-    assert_eq!(fs::read_to_string(local_dir.path().join("file_b.txt")).unwrap(), "from B");
+    assert_eq!(
+        fs::read_to_string(remote_dir.path().join("file_a.txt")).unwrap(),
+        "from A"
+    );
+    assert_eq!(
+        fs::read_to_string(local_dir.path().join("file_b.txt")).unwrap(),
+        "from B"
+    );
 }
 
 /// Bidi conflict — same path modified on both sides, remote has a larger/newer file → remote wins.
@@ -454,13 +458,16 @@ async fn e2e_bidi_conflict_newer_wins() {
     // Seed index with an old baseline so both sides are seen as Modified
     let rel = RelPath::new("shared.txt");
     let mut index = SyncIndex::default();
-    index.entries.insert(rel.clone(), IndexEntry {
-        path: rel,
-        kind: EntryKind::File,
-        size: 5,
-        mtime_secs: 1_000,
-        hash: "old".to_owned(),
-    });
+    index.entries.insert(
+        rel.clone(),
+        IndexEntry {
+            path: rel,
+            kind: EntryKind::File,
+            size: 5,
+            mtime_secs: 1_000,
+            hash: "old".to_owned(),
+        },
+    );
 
     // Write local version first, then remote (so remote has a later mtime on a real FS)
     fs::write(local_dir.path().join("shared.txt"), "local version").unwrap();
@@ -475,7 +482,10 @@ async fn e2e_bidi_conflict_newer_wins() {
     // Both sides must converge to the same content (whichever side was newer wins both).
     let local_content = fs::read_to_string(local_dir.path().join("shared.txt")).unwrap();
     let remote_content = fs::read_to_string(remote_dir.path().join("shared.txt")).unwrap();
-    assert_eq!(local_content, remote_content, "both sides must converge to the same winner");
+    assert_eq!(
+        local_content, remote_content,
+        "both sides must converge to the same winner"
+    );
     assert!(
         local_content == "local version" || local_content == "remote version",
         "winner must be one of the two versions, got: {local_content:?}"
@@ -493,10 +503,20 @@ async fn e2e_bidi_same_content_no_transfer() {
     fs::write(local_dir.path().join("sync.txt"), "identical content").unwrap();
     fs::write(remote_dir.path().join("sync.txt"), "identical content").unwrap();
 
-    let result = run_bidi_test(peer_a, peer_b, &local_dir, &remote_dir, SyncIndex::default()).await;
+    let result = run_bidi_test(
+        peer_a,
+        peer_b,
+        &local_dir,
+        &remote_dir,
+        SyncIndex::default(),
+    )
+    .await;
 
     assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
-    assert_eq!(result.files_transferred, 0, "no transfer expected when content is identical");
+    assert_eq!(
+        result.files_transferred, 0,
+        "no transfer expected when content is identical"
+    );
 }
 
 /// Bidi delete-vs-edit: A deletes a file, B edits it → edited copy restored on A.
@@ -507,13 +527,16 @@ async fn e2e_bidi_delete_vs_edit() {
     // Start with a shared baseline in the index
     let rel = RelPath::new("edited.txt");
     let mut index = SyncIndex::default();
-    index.entries.insert(rel.clone(), IndexEntry {
-        path: rel,
-        kind: EntryKind::File,
-        size: 10,
-        mtime_secs: 500_000,
-        hash: "old_hash".to_owned(),
-    });
+    index.entries.insert(
+        rel.clone(),
+        IndexEntry {
+            path: rel,
+            kind: EntryKind::File,
+            size: 10,
+            mtime_secs: 500_000,
+            hash: "old_hash".to_owned(),
+        },
+    );
 
     // A deleted the file (not present locally), B edited it
     fs::write(remote_dir.path().join("edited.txt"), "edited on B").unwrap();
@@ -523,7 +546,10 @@ async fn e2e_bidi_delete_vs_edit() {
 
     assert!(result.errors.is_empty(), "errors: {:?}", result.errors);
     // The edited copy should be restored on A's side
-    assert_eq!(fs::read_to_string(local_dir.path().join("edited.txt")).unwrap(), "edited on B");
+    assert_eq!(
+        fs::read_to_string(local_dir.path().join("edited.txt")).unwrap(),
+        "edited on B"
+    );
 }
 
 /// Updated index reflects the files that were successfully transferred.
@@ -550,11 +576,9 @@ async fn e2e_push_updated_index() {
     let server_config = syncnet::tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
     let client_config = syncnet::tls::make_client_config(&peer_a, &a_pinned, false).unwrap();
 
-    let tcp_listener = tokio::net::TcpListener::bind(
-        SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
-    )
-    .await
-    .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_handle = tokio::spawn(async move {
@@ -598,8 +622,18 @@ async fn e2e_push_updated_index() {
     assert!(result.errors.is_empty());
 
     // Index should contain both transferred files
-    assert!(result.updated_index.entries.contains_key(&RelPath::new("a.txt")));
-    assert!(result.updated_index.entries.contains_key(&RelPath::new("b.txt")));
+    assert!(
+        result
+            .updated_index
+            .entries
+            .contains_key(&RelPath::new("a.txt"))
+    );
+    assert!(
+        result
+            .updated_index
+            .entries
+            .contains_key(&RelPath::new("b.txt"))
+    );
     let a_entry = &result.updated_index.entries[&RelPath::new("a.txt")];
     assert_eq!(a_entry.size, 6); // "file a".len()
 }
@@ -654,10 +688,9 @@ async fn e2e_profile_replicated_on_sync() {
     let (profile, anchors) = make_test_profile(instance_a_id, instance_b_id);
     let profile_id = profile.id;
 
-    let tcp_listener =
-        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-            .await
-            .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
@@ -756,7 +789,8 @@ async fn e2e_profile_version_conflict() {
             max_depth: -1,
             include_hidden: true,
             ignore_patterns: vec![],
-        }).unwrap();
+        })
+        .unwrap();
 
         // A tries to send version 1 (stale)
         let old_profile = ProfileRow {
@@ -892,14 +926,14 @@ async fn e2e_profile_tombstone_delivered() {
     let a_db_path = a_db_dir.path().join("a.db");
     {
         let db_a = Db::open(&a_db_path).unwrap();
-        db_a.insert_profile_tombstone(profile_id, "2026-06-15T08:00:00Z").unwrap();
+        db_a.insert_profile_tombstone(profile_id, "2026-06-15T08:00:00Z")
+            .unwrap();
         drop(db_a);
     }
 
-    let tcp_listener =
-        tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
-            .await
-            .unwrap();
+    let tcp_listener = tokio::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))
+        .await
+        .unwrap();
     let server_addr = tcp_listener.local_addr().unwrap();
 
     let server_config = tls::make_server_config(&peer_b, &b_pinned, false).unwrap();
@@ -924,7 +958,9 @@ async fn e2e_profile_tombstone_delivered() {
         let mut stream = framed(tls);
         let mut req_id = 0u32;
 
-        let delivered = deliver_tombstones(&mut stream, &mut req_id, &a_db_path_clone).await.unwrap();
+        let delivered = deliver_tombstones(&mut stream, &mut req_id, &a_db_path_clone)
+            .await
+            .unwrap();
         assert_eq!(delivered, 1);
     });
 

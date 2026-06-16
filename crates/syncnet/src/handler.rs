@@ -14,12 +14,12 @@ use synccore::reconcile::{ConflictPolicy, SyncMode};
 use synccore::scan::{self, ScanConfig};
 use syncstore::profiles::{AnchorRow, ProfileRow};
 
+use crate::Error;
 use crate::rpc::{
     AnchorSpec, ErrorCode, RpcBody, RpcRequest, RpcResponse, WireAnchor, WireProfile,
     WireProfileSummary, decode_message, encode_response,
 };
 use crate::transport::{Frame, FramedStream, MessageType};
-use crate::Error;
 
 struct SessionState {
     #[allow(dead_code)]
@@ -54,7 +54,9 @@ impl SyncHandler {
     }
 
     fn open_db(&self) -> Option<syncstore::Db> {
-        self.db_path.as_ref().and_then(|p| syncstore::Db::open(p).ok())
+        self.db_path
+            .as_ref()
+            .and_then(|p| syncstore::Db::open(p).ok())
     }
 
     #[allow(clippy::too_many_lines)]
@@ -104,14 +106,13 @@ impl SyncHandler {
                             let prep = self.put_file_validate(anchor_id, &path, &session);
                             match prep {
                                 Ok(dest_path) => {
-                                    let resp_bytes =
-                                        encode_response(req_id, RpcResponse::Ok)?;
+                                    let resp_bytes = encode_response(req_id, RpcResponse::Ok)?;
                                     send_frame(stream, MessageType::RpcResponse, resp_bytes)
                                         .await?;
 
-                                    let write_result =
-                                        self.receive_and_write_file(stream, &dest_path, mtime_secs)
-                                            .await;
+                                    let write_result = self
+                                        .receive_and_write_file(stream, &dest_path, mtime_secs)
+                                        .await;
 
                                     let final_resp = match write_result {
                                         Ok(()) => RpcResponse::Ok,
@@ -135,8 +136,7 @@ impl SyncHandler {
                             let validate = self.get_files_validate(anchor_id, &paths, &session);
                             match validate {
                                 Ok(root) => {
-                                    let resp_bytes =
-                                        encode_response(req_id, RpcResponse::Ok)?;
+                                    let resp_bytes = encode_response(req_id, RpcResponse::Ok)?;
                                     send_frame(stream, MessageType::RpcResponse, resp_bytes)
                                         .await?;
 
@@ -177,7 +177,8 @@ impl SyncHandler {
                             path,
                             new_name,
                         } => {
-                            let response = self.rename_remote(anchor_id, &path, &new_name, &session);
+                            let response =
+                                self.rename_remote(anchor_id, &path, &new_name, &session);
                             let resp_bytes = encode_response(req_id, response)?;
                             send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
                         }
@@ -196,7 +197,10 @@ impl SyncHandler {
                             let resp_bytes = encode_response(req_id, response)?;
                             send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
                         }
-                        RpcRequest::ProfileDeleted { profile_id, deleted_at } => {
+                        RpcRequest::ProfileDeleted {
+                            profile_id,
+                            deleted_at,
+                        } => {
                             let response = self.handle_profile_deleted(profile_id, &deleted_at);
                             let resp_bytes = encode_response(req_id, response)?;
                             send_frame(stream, MessageType::RpcResponse, resp_bytes).await?;
@@ -254,12 +258,10 @@ impl SyncHandler {
             | RpcRequest::ListProfiles
             | RpcRequest::GetProfile { .. }
             | RpcRequest::ReplicateProfile { .. }
-            | RpcRequest::ProfileDeleted { .. } => {
-                RpcResponse::Error {
-                    code: ErrorCode::Internal,
-                    message: "bug: this RPC is handled in serve loop".to_owned(),
-                }
-            }
+            | RpcRequest::ProfileDeleted { .. } => RpcResponse::Error {
+                code: ErrorCode::Internal,
+                message: "bug: this RPC is handled in serve loop".to_owned(),
+            },
         }
     }
 
@@ -342,10 +344,13 @@ impl SyncHandler {
             message: "no active session".to_owned(),
         })?;
 
-        let root = sess.allowed_anchors.get(&anchor_id).ok_or(RpcResponse::Error {
-            code: ErrorCode::AccessDenied,
-            message: format!("anchor {anchor_id} not allowed"),
-        })?;
+        let root = sess
+            .allowed_anchors
+            .get(&anchor_id)
+            .ok_or(RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("anchor {anchor_id} not allowed"),
+            })?;
 
         for path in paths {
             let full = root.join(path.to_path_buf());
@@ -371,10 +376,13 @@ impl SyncHandler {
             message: "no active session".to_owned(),
         })?;
 
-        let root = sess.allowed_anchors.get(&anchor_id).ok_or(RpcResponse::Error {
-            code: ErrorCode::AccessDenied,
-            message: format!("anchor {anchor_id} not allowed"),
-        })?;
+        let root = sess
+            .allowed_anchors
+            .get(&anchor_id)
+            .ok_or(RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("anchor {anchor_id} not allowed"),
+            })?;
 
         let dest = root.join(path.to_path_buf());
         if let Some(parent) = dest.parent() {
@@ -510,7 +518,9 @@ impl SyncHandler {
             let frame = stream
                 .next()
                 .await
-                .ok_or_else(|| Error::Transport("connection closed during file receive".to_owned()))?
+                .ok_or_else(|| {
+                    Error::Transport("connection closed during file receive".to_owned())
+                })?
                 .map_err(|e| Error::Transport(format!("recv file data: {e}")))?;
 
             if frame.msg_type != MessageType::FileData {
@@ -542,8 +552,8 @@ impl SyncHandler {
         const CHUNK_SIZE: usize = 256 * 1024;
 
         let full = root.join(path.to_path_buf());
-        let data = fs::read(&full)
-            .map_err(|e| Error::Session(format!("read {}: {e}", full.display())))?;
+        let data =
+            fs::read(&full).map_err(|e| Error::Session(format!("read {}: {e}", full.display())))?;
 
         for chunk in data.chunks(CHUNK_SIZE) {
             send_frame(stream, MessageType::FileData, chunk.to_vec()).await?;
@@ -593,7 +603,9 @@ impl SyncHandler {
 
     fn handle_list_profiles(&self) -> RpcResponse {
         let Some(db) = self.open_db() else {
-            return RpcResponse::ProfileList { profiles: Vec::new() };
+            return RpcResponse::ProfileList {
+                profiles: Vec::new(),
+            };
         };
 
         let profiles = match db.list_profiles_for_peer(self.peer_id) {
@@ -617,7 +629,9 @@ impl SyncHandler {
             })
             .collect();
 
-        RpcResponse::ProfileList { profiles: summaries }
+        RpcResponse::ProfileList {
+            profiles: summaries,
+        }
     }
 
     fn handle_get_profile(&self, profile_id: Uuid) -> RpcResponse {
@@ -832,7 +846,10 @@ pub fn profile_to_wire(
 /// Convert a WireProfile received from a peer into a local ProfileRow + anchors.
 /// `local_instance_id` is this instance's UUID — used to determine which side of the
 /// path mapping is "local" to us.
-pub fn wire_to_profile(wire: &WireProfile, local_instance_id: Uuid) -> (ProfileRow, Vec<AnchorRow>) {
+pub fn wire_to_profile(
+    wire: &WireProfile,
+    local_instance_id: Uuid,
+) -> (ProfileRow, Vec<AnchorRow>) {
     let i_am_origin = wire.origin_instance_id == local_instance_id;
 
     let row = ProfileRow {

@@ -12,9 +12,7 @@ pub fn nfd_normalize(s: &str) -> String {
 #[must_use]
 pub fn app_db_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    PathBuf::from(home)
-        .join(".filesync")
-        .join("filesync.db")
+    PathBuf::from(home).join(".filesync").join("filesync.db")
 }
 
 #[cfg(test)]

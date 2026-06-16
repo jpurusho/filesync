@@ -11,13 +11,13 @@ use synccore::plan;
 use synccore::reconcile::{self, Action, ConflictPolicy, ReconcileContext, Side, SyncMode};
 use synccore::scan::{self, EntryKind, ScanConfig, Snapshot};
 
+use crate::Error;
 use crate::handler::{atomic_write_file, profile_to_wire, wire_to_profile};
 use crate::rpc::{
-    AnchorSpec, RpcBody, RpcRequest, RpcResponse, WireProfile, WireProfileSummary,
-    decode_message, encode_request,
+    AnchorSpec, RpcBody, RpcRequest, RpcResponse, WireProfile, WireProfileSummary, decode_message,
+    encode_request,
 };
 use crate::transport::{Frame, FramedStream, MessageType};
-use crate::Error;
 
 use syncstore::profiles::{AnchorRow, ProfileRow};
 
@@ -74,12 +74,16 @@ pub async fn run_remote_push<S: AsyncRead + AsyncWrite + Unpin>(
         .collect();
 
     req_id += 1;
-    send_request(stream, req_id, RpcRequest::StartSession {
-        profile_id: config.profile_id,
-        mode: config.mode,
-        anchors: anchor_specs,
-        initiator_unix_secs: now_unix_secs(),
-    })
+    send_request(
+        stream,
+        req_id,
+        RpcRequest::StartSession {
+            profile_id: config.profile_id,
+            mode: config.mode,
+            anchors: anchor_specs,
+            initiator_unix_secs: now_unix_secs(),
+        },
+    )
     .await?;
     // clock_offset not used for push, but we must read the SessionStarted response
     let _ = expect_session_started(stream).await?;
@@ -89,10 +93,14 @@ pub async fn run_remote_push<S: AsyncRead + AsyncWrite + Unpin>(
     for anchor in &config.anchors {
         // 2. Scan remote
         req_id += 1;
-        send_request(stream, req_id, RpcRequest::ScanRemote {
-            anchor_id: anchor.id,
-            config: anchor.scan_config.clone(),
-        })
+        send_request(
+            stream,
+            req_id,
+            RpcRequest::ScanRemote {
+                anchor_id: anchor.id,
+                config: anchor.scan_config.clone(),
+            },
+        )
         .await?;
         let remote_snap = expect_snapshot(stream).await?;
 
@@ -118,27 +126,17 @@ pub async fn run_remote_push<S: AsyncRead + AsyncWrite + Unpin>(
             clock_offset_secs: 0,
         };
 
-        let mut sync_plan = reconcile::reconcile(
-            &diff,
-            index,
-            config.mode,
-            config.conflict_policy,
-            &ctx,
-        );
+        let mut sync_plan =
+            reconcile::reconcile(&diff, index, config.mode, config.conflict_policy, &ctx);
         plan::dedup_dirs(&mut sync_plan);
         plan::order_actions(&mut sync_plan);
 
         // 5. Execute plan over RPC
         let mut executed: Vec<&Action> = Vec::new();
         for action in &sync_plan.actions {
-            let result = execute_push_action(
-                stream,
-                action,
-                anchor.id,
-                &anchor.local_path,
-                &mut req_id,
-            )
-            .await;
+            let result =
+                execute_push_action(stream, action, anchor.id, &anchor.local_path, &mut req_id)
+                    .await;
 
             match result {
                 Ok(bytes) => {
@@ -205,12 +203,16 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
         .collect();
 
     req_id += 1;
-    send_request(stream, req_id, RpcRequest::StartSession {
-        profile_id: config.profile_id,
-        mode: config.mode,
-        anchors: anchor_specs,
-        initiator_unix_secs: now_unix_secs(),
-    })
+    send_request(
+        stream,
+        req_id,
+        RpcRequest::StartSession {
+            profile_id: config.profile_id,
+            mode: config.mode,
+            anchors: anchor_specs,
+            initiator_unix_secs: now_unix_secs(),
+        },
+    )
     .await?;
     let _ = expect_session_started(stream).await?;
 
@@ -219,10 +221,14 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
     for anchor in &config.anchors {
         // 2. Scan remote
         req_id += 1;
-        send_request(stream, req_id, RpcRequest::ScanRemote {
-            anchor_id: anchor.id,
-            config: anchor.scan_config.clone(),
-        })
+        send_request(
+            stream,
+            req_id,
+            RpcRequest::ScanRemote {
+                anchor_id: anchor.id,
+                config: anchor.scan_config.clone(),
+            },
+        )
         .await?;
         let remote_snap = expect_snapshot(stream).await?;
 
@@ -248,13 +254,8 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
             clock_offset_secs: 0,
         };
 
-        let mut sync_plan = reconcile::reconcile(
-            &diff,
-            index,
-            config.mode,
-            config.conflict_policy,
-            &ctx,
-        );
+        let mut sync_plan =
+            reconcile::reconcile(&diff, index, config.mode, config.conflict_policy, &ctx);
         plan::dedup_dirs(&mut sync_plan);
         plan::order_actions(&mut sync_plan);
 
@@ -314,10 +315,14 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
         // 6. Request files from remote
         if !paths_to_pull.is_empty() {
             req_id += 1;
-            send_request(stream, req_id, RpcRequest::GetFiles {
-                anchor_id: anchor.id,
-                paths: paths_to_pull.clone(),
-            })
+            send_request(
+                stream,
+                req_id,
+                RpcRequest::GetFiles {
+                    anchor_id: anchor.id,
+                    paths: paths_to_pull.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
 
@@ -374,17 +379,27 @@ async fn execute_push_action<S: AsyncRead + AsyncWrite + Unpin>(
     req_id: &mut u32,
 ) -> Result<u64, Error> {
     match action {
-        Action::CreateDir { on: Side::Remote, path } => {
+        Action::CreateDir {
+            on: Side::Remote,
+            path,
+        } => {
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::MkdirRemote {
-                anchor_id,
-                path: path.clone(),
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::MkdirRemote {
+                    anchor_id,
+                    path: path.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
             Ok(0)
         }
-        Action::CopyFile { from: Side::Local, path } => {
+        Action::CopyFile {
+            from: Side::Local,
+            path,
+        } => {
             let source = local_root.join(path.to_path_buf());
             let data = std::fs::read(&source)
                 .map_err(|e| Error::Session(format!("read {}: {e}", source.display())))?;
@@ -398,12 +413,16 @@ async fn execute_push_action<S: AsyncRead + AsyncWrite + Unpin>(
                 });
 
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::PutFile {
-                anchor_id,
-                path: path.clone(),
-                size,
-                mtime_secs,
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::PutFile {
+                    anchor_id,
+                    path: path.clone(),
+                    size,
+                    mtime_secs,
+                },
+            )
             .await?;
             expect_ok(stream).await?;
 
@@ -415,12 +434,19 @@ async fn execute_push_action<S: AsyncRead + AsyncWrite + Unpin>(
 
             Ok(size)
         }
-        Action::Delete { on: Side::Remote, path } => {
+        Action::Delete {
+            on: Side::Remote,
+            path,
+        } => {
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::DeleteRemote {
-                anchor_id,
-                path: path.clone(),
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::DeleteRemote {
+                    anchor_id,
+                    path: path.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
             Ok(0)
@@ -605,12 +631,18 @@ fn apply_actions_to_index(
 ) {
     for action in executed {
         match action {
-            Action::CopyFile { from: Side::Local, path } => {
+            Action::CopyFile {
+                from: Side::Local,
+                path,
+            } => {
                 if let Some(entry) = local_snap.entries.get(path) {
                     upsert_index_from_entry(index, entry);
                 }
             }
-            Action::CopyFile { from: Side::Remote, path } => {
+            Action::CopyFile {
+                from: Side::Remote,
+                path,
+            } => {
                 if let Some(entry) = remote_snap.entries.get(path) {
                     upsert_index_from_entry(index, entry);
                 }
@@ -618,16 +650,27 @@ fn apply_actions_to_index(
             Action::Delete { path, .. } => {
                 index.entries.remove(path);
             }
-            Action::RenameConflict { on: Side::Local, path, new_name } => {
+            Action::RenameConflict {
+                on: Side::Local,
+                path,
+                new_name,
+            } => {
                 if let Some(old) = index.entries.remove(path) {
                     let new_key = RelPath::new(new_name);
-                    index.entries.insert(new_key.clone(), IndexEntry {
-                        path: new_key,
-                        ..old
-                    });
+                    index.entries.insert(
+                        new_key.clone(),
+                        IndexEntry {
+                            path: new_key,
+                            ..old
+                        },
+                    );
                 }
             }
-            Action::RenameConflict { on: Side::Remote, path, new_name } => {
+            Action::RenameConflict {
+                on: Side::Remote,
+                path,
+                new_name,
+            } => {
                 // Remote renamed a file; the new name will be pulled via CopyFile — just
                 // remove the old entry so the next run treats it as a fresh create.
                 index.entries.remove(path);
@@ -680,12 +723,16 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
         .collect();
 
     req_id += 1;
-    send_request(stream, req_id, RpcRequest::StartSession {
-        profile_id: config.profile_id,
-        mode: config.mode,
-        anchors: anchor_specs,
-        initiator_unix_secs: now_unix_secs(),
-    })
+    send_request(
+        stream,
+        req_id,
+        RpcRequest::StartSession {
+            profile_id: config.profile_id,
+            mode: config.mode,
+            anchors: anchor_specs,
+            initiator_unix_secs: now_unix_secs(),
+        },
+    )
     .await?;
     let clock_offset_secs = expect_session_started(stream).await?;
 
@@ -694,10 +741,14 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
     for anchor in &config.anchors {
         // 2. Scan remote
         req_id += 1;
-        send_request(stream, req_id, RpcRequest::ScanRemote {
-            anchor_id: anchor.id,
-            config: anchor.scan_config.clone(),
-        })
+        send_request(
+            stream,
+            req_id,
+            RpcRequest::ScanRemote {
+                anchor_id: anchor.id,
+                config: anchor.scan_config.clone(),
+            },
+        )
         .await?;
         let remote_snap = expect_snapshot(stream).await?;
 
@@ -723,13 +774,8 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
             clock_offset_secs,
         };
 
-        let mut sync_plan = reconcile::reconcile(
-            &diff,
-            index,
-            config.mode,
-            config.conflict_policy,
-            &ctx,
-        );
+        let mut sync_plan =
+            reconcile::reconcile(&diff, index, config.mode, config.conflict_policy, &ctx);
         plan::dedup_dirs(&mut sync_plan);
         plan::order_actions(&mut sync_plan);
 
@@ -740,10 +786,18 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
         for action in &sync_plan.actions {
             match action {
                 // --- Remote-side actions ---
-                Action::CreateDir { on: Side::Remote, .. }
-                | Action::CopyFile { from: Side::Local, .. }
-                | Action::Delete { on: Side::Remote, .. }
-                | Action::RenameConflict { on: Side::Remote, .. } => {
+                Action::CreateDir {
+                    on: Side::Remote, ..
+                }
+                | Action::CopyFile {
+                    from: Side::Local, ..
+                }
+                | Action::Delete {
+                    on: Side::Remote, ..
+                }
+                | Action::RenameConflict {
+                    on: Side::Remote, ..
+                } => {
                     let result = execute_bidi_remote_action(
                         stream,
                         action,
@@ -768,14 +822,22 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
                     }
                 }
                 // --- Local-side actions ---
-                Action::CreateDir { on: Side::Local, path } => {
+                Action::CreateDir {
+                    on: Side::Local,
+                    path,
+                } => {
                     let full = anchor.local_path.join(path.to_path_buf());
                     match std::fs::create_dir_all(&full) {
-                        Ok(()) => { executed.push(action); }
+                        Ok(()) => {
+                            executed.push(action);
+                        }
                         Err(e) => errors.push(format!("mkdir {}: {e}", path.display())),
                     }
                 }
-                Action::Delete { on: Side::Local, path } => {
+                Action::Delete {
+                    on: Side::Local,
+                    path,
+                } => {
                     let full = anchor.local_path.join(path.to_path_buf());
                     let result = if full.is_dir() {
                         std::fs::remove_dir_all(&full)
@@ -785,20 +847,31 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
                         Ok(())
                     };
                     match result {
-                        Ok(()) => { executed.push(action); }
+                        Ok(()) => {
+                            executed.push(action);
+                        }
                         Err(e) => errors.push(format!("delete {}: {e}", path.display())),
                     }
                 }
-                Action::RenameConflict { on: Side::Local, path, new_name } => {
+                Action::RenameConflict {
+                    on: Side::Local,
+                    path,
+                    new_name,
+                } => {
                     let from = anchor.local_path.join(path.to_path_buf());
                     let to = anchor.local_path.join(new_name);
                     match std::fs::rename(&from, &to) {
-                        Ok(()) => { executed.push(action); }
+                        Ok(()) => {
+                            executed.push(action);
+                        }
                         Err(e) => errors.push(format!("rename {}: {e}", path.display())),
                     }
                 }
                 // CopyFile from Remote is batched into GetFiles below
-                Action::CopyFile { from: Side::Remote, path } => {
+                Action::CopyFile {
+                    from: Side::Remote,
+                    path,
+                } => {
                     paths_to_pull.push(path.clone());
                 }
             }
@@ -807,10 +880,14 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
         // 6. Pull all Remote→Local files in one batched GetFiles request
         if !paths_to_pull.is_empty() {
             req_id += 1;
-            send_request(stream, req_id, RpcRequest::GetFiles {
-                anchor_id: anchor.id,
-                paths: paths_to_pull.clone(),
-            })
+            send_request(
+                stream,
+                req_id,
+                RpcRequest::GetFiles {
+                    anchor_id: anchor.id,
+                    paths: paths_to_pull.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
 
@@ -867,17 +944,27 @@ async fn execute_bidi_remote_action<S: AsyncRead + AsyncWrite + Unpin>(
     _paths_to_pull: &mut Vec<RelPath>,
 ) -> Result<u64, Error> {
     match action {
-        Action::CreateDir { on: Side::Remote, path } => {
+        Action::CreateDir {
+            on: Side::Remote,
+            path,
+        } => {
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::MkdirRemote {
-                anchor_id,
-                path: path.clone(),
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::MkdirRemote {
+                    anchor_id,
+                    path: path.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
             Ok(0)
         }
-        Action::CopyFile { from: Side::Local, path } => {
+        Action::CopyFile {
+            from: Side::Local,
+            path,
+        } => {
             let source = local_root.join(path.to_path_buf());
             let data = std::fs::read(&source)
                 .map_err(|e| Error::Session(format!("read {}: {e}", source.display())))?;
@@ -891,35 +978,54 @@ async fn execute_bidi_remote_action<S: AsyncRead + AsyncWrite + Unpin>(
                 });
 
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::PutFile {
-                anchor_id,
-                path: path.clone(),
-                size,
-                mtime_secs,
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::PutFile {
+                    anchor_id,
+                    path: path.clone(),
+                    size,
+                    mtime_secs,
+                },
+            )
             .await?;
             expect_ok(stream).await?;
             send_file_data(stream, &data).await?;
             expect_ok(stream).await?;
             Ok(size)
         }
-        Action::Delete { on: Side::Remote, path } => {
+        Action::Delete {
+            on: Side::Remote,
+            path,
+        } => {
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::DeleteRemote {
-                anchor_id,
-                path: path.clone(),
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::DeleteRemote {
+                    anchor_id,
+                    path: path.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
             Ok(0)
         }
-        Action::RenameConflict { on: Side::Remote, path, new_name } => {
+        Action::RenameConflict {
+            on: Side::Remote,
+            path,
+            new_name,
+        } => {
             *req_id += 1;
-            send_request(stream, *req_id, RpcRequest::RenameRemote {
-                anchor_id,
-                path: path.clone(),
-                new_name: new_name.clone(),
-            })
+            send_request(
+                stream,
+                *req_id,
+                RpcRequest::RenameRemote {
+                    anchor_id,
+                    path: path.clone(),
+                    new_name: new_name.clone(),
+                },
+            )
             .await?;
             expect_ok(stream).await?;
             Ok(0)
@@ -963,14 +1069,12 @@ pub async fn quick_send<S: AsyncRead + AsyncWrite + Unpin>(
     };
 
     if source_path.is_file() {
-        let meta = std::fs::metadata(source_path)
-            .map_err(|e| Error::Session(format!("stat: {e}")))?;
-        let mtime_secs = meta
-            .modified()
-            .map_or(0, |t| {
-                t.duration_since(std::time::UNIX_EPOCH)
-                    .map_or(0, |d| d.as_secs() as i64)
-            });
+        let meta =
+            std::fs::metadata(source_path).map_err(|e| Error::Session(format!("stat: {e}")))?;
+        let mtime_secs = meta.modified().map_or(0, |t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs() as i64)
+        });
         let file_name = source_path
             .file_name()
             .unwrap_or_default()
@@ -984,12 +1088,8 @@ pub async fn quick_send<S: AsyncRead + AsyncWrite + Unpin>(
         });
     } else {
         for entry in WalkDir::new(source_path).min_depth(1).sort_by_file_name() {
-            let entry =
-                entry.map_err(|e| Error::Session(format!("walk: {e}")))?;
-            let rel = entry
-                .path()
-                .strip_prefix(base)
-                .unwrap_or(entry.path());
+            let entry = entry.map_err(|e| Error::Session(format!("walk: {e}")))?;
+            let rel = entry.path().strip_prefix(base).unwrap_or(entry.path());
             let rel_str = rel.to_string_lossy().to_string();
 
             if entry.file_type().is_dir() {
@@ -1000,14 +1100,13 @@ pub async fn quick_send<S: AsyncRead + AsyncWrite + Unpin>(
                     is_dir: true,
                 });
             } else {
-                let meta = entry.metadata()
+                let meta = entry
+                    .metadata()
                     .map_err(|e| Error::Session(format!("stat: {e}")))?;
-                let mtime_secs = meta
-                    .modified()
-                    .map_or(0, |t| {
-                        t.duration_since(std::time::UNIX_EPOCH)
-                            .map_or(0, |d| d.as_secs() as i64)
-                    });
+                let mtime_secs = meta.modified().map_or(0, |t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs() as i64)
+                });
                 entries.push(QuickSendEntry {
                     rel_path: RelPath::new(&rel_str),
                     size: meta.len(),
@@ -1103,7 +1202,12 @@ pub async fn replicate_profile<S: AsyncRead + AsyncWrite + Unpin>(
     let wire = profile_to_wire(profile, anchors, instance_id);
 
     *req_id += 1;
-    send_request(stream, *req_id, RpcRequest::ReplicateProfile { profile: wire }).await?;
+    send_request(
+        stream,
+        *req_id,
+        RpcRequest::ReplicateProfile { profile: wire },
+    )
+    .await?;
 
     let frame = stream
         .next()
@@ -1139,10 +1243,12 @@ pub async fn replicate_profile<S: AsyncRead + AsyncWrite + Unpin>(
             }
             Ok(false)
         }
-        RpcBody::Response(RpcResponse::Error { code, message }) => {
-            Err(Error::Rpc(format!("replicate profile error ({code:?}): {message}")))
-        }
-        _ => Err(Error::Rpc("unexpected response to ReplicateProfile".to_owned())),
+        RpcBody::Response(RpcResponse::Error { code, message }) => Err(Error::Rpc(format!(
+            "replicate profile error ({code:?}): {message}"
+        ))),
+        _ => Err(Error::Rpc(
+            "unexpected response to ReplicateProfile".to_owned(),
+        )),
     }
 }
 
@@ -1153,8 +1259,7 @@ pub async fn deliver_tombstones<S: AsyncRead + AsyncWrite + Unpin>(
     req_id: &mut u32,
     db_path: &std::path::Path,
 ) -> Result<u32, Error> {
-    let db = syncstore::Db::open(db_path)
-        .map_err(|e| Error::Session(format!("open db: {e}")))?;
+    let db = syncstore::Db::open(db_path).map_err(|e| Error::Session(format!("open db: {e}")))?;
 
     let tombstones = db
         .list_undelivered_tombstones()
@@ -1213,9 +1318,9 @@ pub async fn list_peer_profiles<S: AsyncRead + AsyncWrite + Unpin>(
     let msg = decode_message(&frame.payload)?;
     match msg.body {
         RpcBody::Response(RpcResponse::ProfileList { profiles }) => Ok(profiles),
-        RpcBody::Response(RpcResponse::Error { code, message }) => {
-            Err(Error::Rpc(format!("list profiles error ({code:?}): {message}")))
-        }
+        RpcBody::Response(RpcResponse::Error { code, message }) => Err(Error::Rpc(format!(
+            "list profiles error ({code:?}): {message}"
+        ))),
         _ => Err(Error::Rpc("expected ProfileList response".to_owned())),
     }
 }
@@ -1227,12 +1332,7 @@ pub async fn fetch_peer_profile<S: AsyncRead + AsyncWrite + Unpin>(
     profile_id: Uuid,
 ) -> Result<WireProfile, Error> {
     *req_id += 1;
-    send_request(
-        stream,
-        *req_id,
-        RpcRequest::GetProfile { profile_id },
-    )
-    .await?;
+    send_request(stream, *req_id, RpcRequest::GetProfile { profile_id }).await?;
 
     let frame = stream
         .next()
@@ -1250,9 +1350,9 @@ pub async fn fetch_peer_profile<S: AsyncRead + AsyncWrite + Unpin>(
     let msg = decode_message(&frame.payload)?;
     match msg.body {
         RpcBody::Response(RpcResponse::ProfileData { profile }) => Ok(profile),
-        RpcBody::Response(RpcResponse::Error { code, message }) => {
-            Err(Error::Rpc(format!("get profile error ({code:?}): {message}")))
-        }
+        RpcBody::Response(RpcResponse::Error { code, message }) => Err(Error::Rpc(format!(
+            "get profile error ({code:?}): {message}"
+        ))),
         _ => Err(Error::Rpc("expected ProfileData response".to_owned())),
     }
 }

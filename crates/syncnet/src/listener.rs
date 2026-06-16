@@ -81,14 +81,14 @@ impl PeerListener {
 
                 tokio::spawn(async move {
                     // Try authenticated mode first (only pinned certs accepted)
-                    let auth_config =
-                        match tls::make_server_config(&identity, &pinned_certs, false) {
-                            Ok(c) => c,
-                            Err(e) => {
-                                error!("TLS config error: {e}");
-                                return;
-                            }
-                        };
+                    let auth_config = match tls::make_server_config(&identity, &pinned_certs, false)
+                    {
+                        Ok(c) => c,
+                        Err(e) => {
+                            error!("TLS config error: {e}");
+                            return;
+                        }
+                    };
 
                     let acceptor = TlsAcceptor::from(auth_config);
                     match acceptor.accept(tcp_stream).await {
@@ -101,10 +101,8 @@ impl PeerListener {
                             });
 
                             // Route to sync handler
-                            let handler = SyncHandler::new(
-                                peer_id.unwrap_or(Uuid::nil()),
-                                identity.id,
-                            );
+                            let handler =
+                                SyncHandler::new(peer_id.unwrap_or(Uuid::nil()), identity.id);
                             let mut stream = framed(tls_stream);
                             if let Err(e) = handler.serve(&mut stream).await {
                                 warn!("sync session error from {peer_addr}: {e}");
@@ -191,9 +189,7 @@ impl PeerListener {
     }
 }
 
-fn extract_peer_id<S>(
-    tls_stream: &tokio_rustls::server::TlsStream<S>,
-) -> Option<Uuid> {
+fn extract_peer_id<S>(tls_stream: &tokio_rustls::server::TlsStream<S>) -> Option<Uuid> {
     let (_, conn) = tls_stream.get_ref();
     let certs = conn.peer_certificates()?;
     let cert_der = certs.first()?;

@@ -149,8 +149,8 @@ pub struct WireProfile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WireAnchor {
-    pub side_a_path: String,  // path on origin instance
-    pub side_b_path: String,  // path on peer
+    pub side_a_path: String, // path on origin instance
+    pub side_b_path: String, // path on peer
     pub max_depth: i32,
     pub include_hidden: bool,
     pub ignore_patterns: Vec<String>,

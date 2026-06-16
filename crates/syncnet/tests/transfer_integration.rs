@@ -60,7 +60,9 @@ async fn push_transfers_files_to_remote() {
     };
 
     let mut stream = framed(client_io);
-    let result = run_remote_push(&mut stream, &config, &SyncIndex::default()).await.unwrap();
+    let result = run_remote_push(&mut stream, &config, &SyncIndex::default())
+        .await
+        .unwrap();
 
     assert_eq!(result.files_transferred, 2);
     assert!(result.errors.is_empty());
@@ -121,7 +123,9 @@ async fn pull_transfers_files_from_remote() {
     };
 
     let mut stream = framed(client_io);
-    let result = run_remote_pull(&mut stream, &config, &SyncIndex::default()).await.unwrap();
+    let result = run_remote_pull(&mut stream, &config, &SyncIndex::default())
+        .await
+        .unwrap();
 
     assert_eq!(result.files_transferred, 2);
     assert!(result.errors.is_empty());
@@ -178,7 +182,9 @@ async fn push_only_transfers_changed_files() {
         };
 
         let mut stream = framed(client_io);
-        let result = run_remote_push(&mut stream, &config, &SyncIndex::default()).await.unwrap();
+        let result = run_remote_push(&mut stream, &config, &SyncIndex::default())
+            .await
+            .unwrap();
         assert_eq!(result.files_transferred, 1); // existing.txt
         drop(stream);
         handler_handle.await.unwrap();
@@ -219,7 +225,9 @@ async fn push_only_transfers_changed_files() {
     // appear as "Created", meaning both get pushed.
     // This is correct behavior: empty index = first sync = transfer everything.
     let mut stream = framed(client_io);
-    let result = run_remote_push(&mut stream, &config, &SyncIndex::default()).await.unwrap();
+    let result = run_remote_push(&mut stream, &config, &SyncIndex::default())
+        .await
+        .unwrap();
 
     // With empty index, both files are "new" from the engine's perspective
     // But the diff against remote shows existing.txt already present — so only new.txt transfers
