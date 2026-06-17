@@ -1,11 +1,17 @@
+import { useEffect } from "react";
 import { useStore } from "./store";
 import { TabBar } from "./components/TabBar";
 import { ProfilesPage } from "./pages/ProfilesPage";
 import { PeersPage } from "./pages/PeersPage";
 import { ActivityPage } from "./pages/ActivityPage";
+import { DeletionPrompt } from "./components/DeletionPrompt";
 
 function App() {
-  const { activeTab } = useStore();
+  const { activeTab, pendingDeletions, fetchPendingDeletions } = useStore();
+
+  useEffect(() => {
+    fetchPendingDeletions();
+  }, [fetchPendingDeletions]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -20,6 +26,14 @@ function App() {
         {activeTab === "peers" && <PeersPage />}
         {activeTab === "activity" && <ActivityPage />}
       </main>
+
+      {/* Deletion prompts - show one at a time */}
+      {pendingDeletions.length > 0 && (
+        <DeletionPrompt
+          profile={pendingDeletions[0]}
+          onResolved={fetchPendingDeletions}
+        />
+      )}
     </div>
   );
 }

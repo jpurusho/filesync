@@ -57,6 +57,31 @@ export interface DriftSummary {
   last_scan_at: string;
 }
 
+export interface PairingConfirmation {
+  peer_id: string;
+  peer_name: string;
+  peer_fingerprint: string;
+}
+
+export interface StartSyncResult {
+  run_id: string;
+  profile_id: string;
+  direction: string;
+}
+
+export interface SyncProgressEvent {
+  profile_id: string;
+  status: string;
+  progress: number;
+}
+
+export interface SyncCompleteEvent {
+  profile_id: string;
+  run_id: string;
+  files_transferred: number;
+  bytes_transferred: number;
+}
+
 export interface ProfileInput {
   name: string;
   mode: string;
@@ -83,9 +108,12 @@ export const commands = {
   updateProfile: (id: string, input: ProfileInput) => invoke<ProfileView>("update_profile", { id, input }),
   deleteProfile: (id: string) => invoke<void>("delete_profile", { id }),
   listPeers: () => invoke<PeerView[]>("list_peers"),
+  pairPeer: (address: string) => invoke<PairingConfirmation>("pair_peer", { address }),
+  unpairPeer: (peerId: string) => invoke<void>("unpair_peer", { peerId }),
   listPendingDeletions: () => invoke<ProfileView[]>("list_pending_deletions"),
   confirmDeletion: (id: string) => invoke<void>("confirm_deletion", { id }),
   rejectDeletion: (id: string) => invoke<void>("reject_deletion", { id }),
   getSyncStatus: (profileId: string) => invoke<SyncStatus>("get_sync_status", { profileId }),
   getDriftSummary: (profileId: string) => invoke<DriftSummary>("get_drift_summary", { profileId }),
+  startSync: (profileId: string, direction: string) => invoke<StartSyncResult>("start_sync", { profileId, direction }),
 };

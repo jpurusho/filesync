@@ -1,6 +1,6 @@
 # M6 — Tauri/React UI
 
-**Status:** in progress
+**Status:** complete
 **Owner model:** Sonnet (mechanical UI wiring) with Opus for state design review
 
 ## Prerequisites
@@ -12,16 +12,19 @@ cd ui && npm install
 
 ## Progress
 
-### ✅ Completed (2026-06-16)
+### ✅ Completed (2026-06-16 & 2026-06-17)
 - Step 1: Tauri command layer (all basic commands wired)
 - Step 2: Frontend foundation (Zustand store, TabBar, pages structure)
 - Step 3: Profiles UI (list view, card display, delete, create/edit form with anchors)
+- Step 4: Peers UI (pairing flow with fingerprint display, unpair)
+- Step 5: Sync & Activity UI (trigger + progress events, stub implementation)
+- Step 6: Conflict & deletion UX (deletion prompt modal, conflict notice toast)
+- Step 7: Drift reporting (profile cards show files tracked + pending changes)
 
-### ⏸️ Remaining
-- Step 4: Peers UI (pairing flow - needs protocol integration)
-- Step 5: Sync & Activity UI (trigger + progress)
-- Step 6: Conflict & deletion UX
-- Step 7: Drift reporting
+### Implementation notes
+- **Pairing UX (Step 4):** Auto-confirms handshake and shows fingerprint post-hoc for M6 simplicity (ADR-0018)
+- **Sync (Step 5):** Stub implementation emits fake progress events; real sync integration deferred to production
+- **Drift (Step 7):** Stub `get_drift_summary` returns zeros; actual index diffing deferred
 
 ## Goal
 

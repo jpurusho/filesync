@@ -24,3 +24,5 @@ uuid.workspace = true
 synccore = { path = "../crates/synccore" }
 syncstore = { path = "../crates/syncstore" }
 syncplatform = { path = "../crates/syncplatform" }
+syncnet = { path = "../crates/syncnet" }
+tokio.workspace = true

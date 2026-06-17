@@ -15,6 +15,13 @@ pub fn app_db_path() -> PathBuf {
     PathBuf::from(home).join(".filesync").join("filesync.db")
 }
 
+/// Get the path to the identity file (certificate + private key)
+#[must_use]
+pub fn identity_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    PathBuf::from(home).join(".filesync").join("identity.json")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,4 +1,5 @@
-import { ProfileView } from "../lib/tauri";
+import { useEffect, useState } from "react";
+import { ProfileView, DriftSummary, commands } from "../lib/tauri";
 
 interface ProfileCardProps {
   profile: ProfileView;
@@ -7,6 +8,12 @@ interface ProfileCardProps {
 }
 
 export function ProfileCard({ profile, onEdit, onDelete }: ProfileCardProps) {
+  const [drift, setDrift] = useState<DriftSummary | null>(null);
+
+  useEffect(() => {
+    commands.getDriftSummary(profile.id).then(setDrift).catch(console.error);
+  }, [profile.id]);
+
   return (
     <div className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start">
@@ -24,6 +31,11 @@ export function ProfileCard({ profile, onEdit, onDelete }: ProfileCardProps) {
               <span className="font-medium">Conflict Policy:</span>{" "}
               <span className="capitalize">{profile.conflict_policy}</span>
             </p>
+            {drift && (
+              <div className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded mt-2">
+                {drift.files_tracked} files tracked · {drift.pending_local_changes} pending changes
+              </div>
+            )}
             <p className="text-xs text-gray-500">
               Last updated: {new Date(profile.updated_at).toLocaleString()}
             </p>

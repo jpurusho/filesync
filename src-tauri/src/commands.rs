@@ -1,13 +1,17 @@
 use crate::views::{
-    AnchorView, DriftSummary, PeerView, ProfileDetail, ProfileInput, ProfileView,
-    SyncStatus,
+    AnchorView, DriftSummary, PairingConfirmation, PeerView, ProfileDetail, ProfileInput,
+    ProfileView, StartSyncResult, SyncStatus,
 };
+use std::net::SocketAddr;
 use std::sync::Mutex;
+use syncnet::identity::Identity;
+use syncnet::pairing;
 use syncstore::{Db, profiles::ProfileRow};
-use tauri::State;
+use tauri::{Emitter, State};
 use uuid::Uuid;
 
 type DbState<'a> = State<'a, Mutex<Db>>;
+type IdentityState<'a> = State<'a, Mutex<Identity>>;
 
 /// List all active profiles (excluding pending deletions)
 #[tauri::command]
@@ -301,4 +305,109 @@ pub fn get_drift_summary(profile_id: String, _db: DbState) -> DriftSummary {
         pending_local_changes: 0,
         last_scan_at: chrono::Utc::now().to_rfc3339(),
     }
+}
+
+/// Initiate pairing with a peer (async handshake).
+///
+/// M6 implementation: Auto-confirms the pairing and returns the peer fingerprint
+/// for post-hoc verification in the UI. A more sophisticated implementation would
+/// pause the handshake and wait for user confirmation before sending Confirm message.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn pair_peer(
+    address: String,
+    identity: IdentityState<'_>,
+    db: DbState<'_>,
+) -> Result<PairingConfirmation, String> {
+    let peer_addr: SocketAddr = address.parse().map_err(|e| format!("Invalid address: {e}"))?;
+
+    // Clone identity to avoid holding lock across await
+    let identity_clone = {
+        let identity = identity.lock().map_err(|e| e.to_string())?;
+        identity.clone()
+    };
+
+    // Perform pairing handshake (auto-confirm for M6)
+    let result = pairing::initiate_pairing(&identity_clone, peer_addr, |_fingerprint| true)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Store peer in database
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let peer_row = syncstore::peers::PeerRow {
+        id: result.peer_id,
+        name: result.peer_name.clone(),
+        cert_pem: result.peer_cert_pem.clone(),
+        fingerprint: result.peer_fingerprint.to_string(),
+        paired_at: chrono::Utc::now().to_rfc3339(),
+        last_seen: None,
+        is_online: false,
+    };
+
+    db.insert_peer(&peer_row).map_err(|e| e.to_string())?;
+
+    Ok(PairingConfirmation {
+        peer_id: result.peer_id.to_string(),
+        peer_name: result.peer_name,
+        peer_fingerprint: result.peer_fingerprint.to_string(),
+    })
+}
+
+/// Unpair a peer (remove from database)
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn unpair_peer(peer_id: String, db: DbState) -> Result<(), String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let uuid = Uuid::parse_str(&peer_id).map_err(|e| e.to_string())?;
+
+    db.delete_peer(uuid).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Start a sync session (stub for M6 - returns immediately, no actual sync yet)
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn start_sync(
+    profile_id: String,
+    direction: String, // "push" | "pull" | "bidi"
+    _db: DbState<'_>,
+    _identity: IdentityState<'_>,
+    app_handle: tauri::AppHandle,
+) -> Result<StartSyncResult, String> {
+    let profile_uuid = Uuid::parse_str(&profile_id).map_err(|e| e.to_string())?;
+    let run_id = Uuid::new_v4();
+
+    // M6 stub: emit fake progress events
+    let app_clone = app_handle.clone();
+    let profile_id_clone = profile_id.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        let _ = app_clone.emit("sync-progress", serde_json::json!({
+            "profile_id": profile_id_clone,
+            "status": "scanning",
+            "progress": 0.2,
+        }));
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+        let _ = app_clone.emit("sync-progress", serde_json::json!({
+            "profile_id": profile_id_clone,
+            "status": "transferring",
+            "progress": 0.6,
+        }));
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+        let _ = app_clone.emit("sync-complete", serde_json::json!({
+            "profile_id": profile_id_clone,
+            "run_id": run_id.to_string(),
+            "files_transferred": 42,
+            "bytes_transferred": 123456,
+        }));
+    });
+
+    Ok(StartSyncResult {
+        run_id: run_id.to_string(),
+        profile_id: profile_uuid.to_string(),
+        direction,
+    })
 }

@@ -93,3 +93,19 @@ pub struct DriftSummary {
     pub pending_local_changes: u64,
     pub last_scan_at: String,
 }
+
+/// Pairing confirmation result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairingConfirmation {
+    pub peer_id: String,
+    pub peer_name: String,
+    pub peer_fingerprint: String,
+}
+
+/// Result of starting a sync session
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartSyncResult {
+    pub run_id: String,
+    pub profile_id: String,
+    pub direction: String,
+}
