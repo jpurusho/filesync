@@ -2,18 +2,42 @@
 
 ## What this is
 
-<!-- One paragraph: what this project does and the stack. Fill in turn 1 with Claude. -->
-<TODO: project description>
+FileSync is a peer-to-peer file synchronization application for macOS. Two computers on a LAN can pair via mDNS discovery, exchange files using TLS-secured connections, and maintain consistent sync state via a local SQLite index. Supports three modes: Push (A→B), Pull (B→A), and Bidirectional (A+B) with conflict resolution (newer-wins or keep-both). Profile replication allows sharing sync configurations between peers. Built with Tauri (Rust core + React UI), designed for privacy-first local sync without cloud intermediaries.
 
 ## Architecture (high level)
 
-<!-- Sketch the major components and how they fit. Fill in once design exists. -->
-<TODO: architecture sketch>
+```
+UI (Tauri + React)
+  ↓
+Commands Layer (src-tauri/src/commands.rs)
+  ↓
+┌──────────────┬──────────────┬──────────────┐
+│  synccore    │   syncnet    │  syncstore   │
+│  (engine)    │  (network)   │  (SQLite)    │
+└──────────────┴──────────────┴──────────────┘
+```
+
+- **synccore:** Scan filesystem, diff against index, reconcile changes, resolve conflicts
+- **syncnet:** mDNS discovery, TLS pairing (TOFU), RPC protocol for file transfer + profile replication
+- **syncstore:** SQLite persistence (profiles, peers, sync index, tombstones)
+- **src-tauri:** Tauri commands exposing backend to React UI
+- **ui:** React frontend with Zustand state management
+
+See README.md for full component breakdown.
 
 ## Phasing / milestones
 
-<!-- Numbered slices, each ending with something runnable. Fill in once planned. -->
-<TODO: milestones>
+- **M0:** Scaffolding (repo structure, Tauri boilerplate) — complete
+- **M1:** Local sync engine (scan, diff, reconcile, apply) — complete
+- **M2:** Discovery and pairing (mDNS, TOFU TLS) — complete
+- **M3:** Networked transfer (push/pull over TLS) — complete
+- **M3.5:** Quick-send (profile-less one-shot transfer) — complete
+- **M4:** Bidirectional reconciliation + clock-skew handling — complete
+- **M5:** Profile replication (share configs, handle tombstones) — complete
+- **M6:** Tauri UI (profiles editor, peers pairing, sync controls, deletion/conflict UX) — complete
+- **M7:** MVP readiness (integration, review, tests, docs) — **IN PROGRESS**
+
+Plans live in `docs/plans/MX-*.md`. Decisions recorded as ADRs in `docs/decisions/NNNN-*.md`.
 
 ## Working style — please follow
 
@@ -60,8 +84,8 @@ If conversation memory and the spec disagree, the spec wins. If the user asks fo
 
 | What | Where |
 |---|---|
-| Authoritative requirements | <TODO: path to spec, e.g. `SPEC.md`> |
-| Architecture decisions (ADRs) | `docs/decisions/NNNN-*.md` |
+| Authoritative requirements | `FileSync_Requirements_Spec.md` |
+| Architecture decisions (ADRs) | `docs/decisions/NNNN-*.md` (19 decisions as of M7) |
 | Per-milestone plans | `docs/plans/MX-*.md` |
 | Token usage ledger (auto-logged) | `~/.claude/projects/<sanitized-cwd>/memory/token_usage_log.md` |
 

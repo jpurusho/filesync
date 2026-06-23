@@ -1,4 +1,5 @@
 mod commands;
+mod sync_executor;
 mod views;
 
 use std::sync::Mutex;

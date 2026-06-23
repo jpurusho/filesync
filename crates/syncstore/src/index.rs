@@ -79,4 +79,14 @@ impl Db {
         )?;
         Ok(())
     }
+
+    /// Count tracked files for a profile (efficient SQL aggregate).
+    pub fn count_tracked_files(&self, profile_id: Uuid) -> Result<u64> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sync_index WHERE profile_id = ?1 AND kind = 'file'",
+            params![profile_id.to_string()],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
 }

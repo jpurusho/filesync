@@ -7,11 +7,16 @@ use std::sync::Mutex;
 use syncnet::identity::Identity;
 use syncnet::pairing;
 use syncstore::{Db, profiles::ProfileRow};
-use tauri::{Emitter, State};
+use tauri::State;
 use uuid::Uuid;
 
 type DbState<'a> = State<'a, Mutex<Db>>;
 type IdentityState<'a> = State<'a, Mutex<Identity>>;
+
+/// Helper to parse UUID from string with consistent error mapping
+fn parse_uuid(s: &str) -> Result<Uuid, String> {
+    Uuid::parse_str(s).map_err(|e| e.to_string())
+}
 
 /// List all active profiles (excluding pending deletions)
 #[tauri::command]
@@ -41,7 +46,7 @@ pub fn list_profiles(db: DbState) -> Result<Vec<ProfileView>, String> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn get_profile(id: String, db: DbState) -> Result<ProfileDetail, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
-    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let uuid = parse_uuid(&id)?;
 
     let profile = db
         .get_profile(uuid)
@@ -134,7 +139,7 @@ pub fn create_profile(input: ProfileInput, db: DbState) -> Result<ProfileView, S
 #[allow(clippy::needless_pass_by_value)]
 pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<ProfileView, String> {
     let db = db.lock().map_err(|e| e.to_string())?;
-    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let uuid = parse_uuid(&id)?;
 
     let existing = db
         .get_profile(uuid)
@@ -193,7 +198,7 @@ pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<Pr
 #[allow(clippy::needless_pass_by_value)]
 pub fn delete_profile(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
-    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let uuid = parse_uuid(&id)?;
 
     // Delete anchors first (foreign key cascade should handle this, but be explicit)
     db.delete_anchors_for_profile(uuid)
@@ -258,7 +263,7 @@ pub fn list_pending_deletions(db: DbState) -> Result<Vec<ProfileView>, String> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
-    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let uuid = parse_uuid(&id)?;
 
     db.delete_anchors_for_profile(uuid)
         .map_err(|e| e.to_string())?;
@@ -272,7 +277,7 @@ pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn reject_deletion(id: String, db: DbState) -> Result<(), String> {
     let db = db.lock().map_err(|e| e.to_string())?;
-    let uuid = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+    let uuid = parse_uuid(&id)?;
 
     db.clear_pending_deletion(uuid).map_err(|e| e.to_string())?;
 
@@ -294,17 +299,26 @@ pub fn get_sync_status(profile_id: String, _db: DbState) -> SyncStatus {
     }
 }
 
-/// Get drift summary for a profile (stub for now)
+/// Get drift summary for a profile
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
-pub fn get_drift_summary(profile_id: String, _db: DbState) -> DriftSummary {
-    // TODO: Implement actual drift calculation from index
-    DriftSummary {
+pub fn get_drift_summary(profile_id: String, db: DbState) -> Result<DriftSummary, String> {
+    let db = db.lock().map_err(|e| e.to_string())?;
+    let profile_uuid = parse_uuid(&profile_id)?;
+
+    // Count tracked files using efficient SQL aggregate
+    let files_tracked = db
+        .count_tracked_files(profile_uuid)
+        .map_err(|e| e.to_string())?;
+
+    // TODO: Scan filesystem and compare to index to get pending_local_changes
+    // For now, just return the tracked count
+    Ok(DriftSummary {
         profile_id,
-        files_tracked: 0,
+        files_tracked,
         pending_local_changes: 0,
         last_scan_at: chrono::Utc::now().to_rfc3339(),
-    }
+    })
 }
 
 /// Initiate pairing with a peer (async handshake).
@@ -319,7 +333,9 @@ pub async fn pair_peer(
     identity: IdentityState<'_>,
     db: DbState<'_>,
 ) -> Result<PairingConfirmation, String> {
-    let peer_addr: SocketAddr = address.parse().map_err(|e| format!("Invalid address: {e}"))?;
+    let peer_addr: SocketAddr = address
+        .parse()
+        .map_err(|e| format!("Invalid address: {e}"))?;
 
     // Clone identity to avoid holding lock across await
     let identity_clone = {
@@ -365,46 +381,25 @@ pub fn unpair_peer(peer_id: String, db: DbState) -> Result<(), String> {
     Ok(())
 }
 
-/// Start a sync session (stub for M6 - returns immediately, no actual sync yet)
+/// Initiate a sync session (async operation).
+///
+/// **Current implementation:** Stub only - returns immediately without transferring files.
+/// Real sync integration blocked by ADR-0019 (Db async access issue).
+/// See `sync_executor.rs` for prepared implementation and ADR-0019 for solution options.
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub async fn start_sync(
     profile_id: String,
+    _peer_address: String,
     direction: String, // "push" | "pull" | "bidi"
     _db: DbState<'_>,
     _identity: IdentityState<'_>,
-    app_handle: tauri::AppHandle,
+    _app_handle: tauri::AppHandle,
 ) -> Result<StartSyncResult, String> {
-    let profile_uuid = Uuid::parse_str(&profile_id).map_err(|e| e.to_string())?;
+    let profile_uuid = parse_uuid(&profile_id)?;
     let run_id = Uuid::new_v4();
 
-    // M6 stub: emit fake progress events
-    let app_clone = app_handle.clone();
-    let profile_id_clone = profile_id.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        let _ = app_clone.emit("sync-progress", serde_json::json!({
-            "profile_id": profile_id_clone,
-            "status": "scanning",
-            "progress": 0.2,
-        }));
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-        let _ = app_clone.emit("sync-progress", serde_json::json!({
-            "profile_id": profile_id_clone,
-            "status": "transferring",
-            "progress": 0.6,
-        }));
-
-        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-        let _ = app_clone.emit("sync-complete", serde_json::json!({
-            "profile_id": profile_id_clone,
-            "run_id": run_id.to_string(),
-            "files_transferred": 42,
-            "bytes_transferred": 123456,
-        }));
-    });
-
+    // Stub for MVP - real sync blocked by Db async access (ADR-0019)
     Ok(StartSyncResult {
         run_id: run_id.to_string(),
         profile_id: profile_uuid.to_string(),

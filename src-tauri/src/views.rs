@@ -96,6 +96,7 @@ pub struct DriftSummary {
 
 /// Pairing confirmation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_field_names)] // peer_ prefix is intentional for clarity
 pub struct PairingConfirmation {
     pub peer_id: String,
     pub peer_name: String,
