@@ -173,18 +173,20 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Peer</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Peer <span className="text-gray-400 text-xs">(optional - can be set later)</span>
+            </label>
             <select
               value={peerId}
               onChange={(e) => {
                 setPeerId(e.target.value);
                 const peer = peers.find((p) => p.id === e.target.value);
                 if (peer) setPeerName(peer.name);
+                else setPeerName("");
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
             >
-              <option value="">Select a peer...</option>
+              <option value="">No peer (configure later)</option>
               {peers.map((peer) => (
                 <option key={peer.id} value={peer.id}>
                   {peer.name}
@@ -193,7 +195,7 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
             </select>
             {peers.length === 0 && (
               <p className="text-sm text-gray-500 mt-1">
-                No peers available. Pair a peer first.
+                No peers paired yet. You can add anchors now and pair later.
               </p>
             )}
           </div>
@@ -276,7 +278,7 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                       onChange={(e) =>
                         handleAnchorChange(index, "local_path", e.target.value)
                       }
-                      placeholder="/path/to/local/folder"
+                      placeholder="~/Documents or /path/to/local/folder"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />
@@ -290,7 +292,7 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                       onChange={(e) =>
                         handleAnchorChange(index, "remote_path", e.target.value)
                       }
-                      placeholder="/path/to/remote/folder"
+                      placeholder="~/Documents or /path/to/remote/folder"
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     />

@@ -17,6 +17,16 @@ fn parse_uuid(s: &str) -> Result<Uuid, String> {
     Uuid::parse_str(s).map_err(|e| e.to_string())
 }
 
+/// Expand tilde (~) in path to home directory
+fn expand_tilde(path: &str) -> String {
+    if path.starts_with("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return path.replacen("~", &home, 1);
+        }
+    }
+    path.to_string()
+}
+
 /// List all active profiles (excluding pending deletions)
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
@@ -106,13 +116,13 @@ pub fn create_profile(input: ProfileInput, db: DbState) -> Result<ProfileView, S
 
     db.insert_profile(&profile).map_err(|e| e.to_string())?;
 
-    // Insert anchors
+    // Insert anchors with tilde expansion
     for anchor_input in input.anchors {
         let anchor = syncstore::profiles::AnchorRow {
             id: 0, // Auto-generated
             profile_id: id,
-            local_path: anchor_input.local_path,
-            remote_path: anchor_input.remote_path,
+            local_path: expand_tilde(&anchor_input.local_path),
+            remote_path: expand_tilde(&anchor_input.remote_path),
             max_depth: anchor_input.max_depth,
             include_hidden: anchor_input.include_hidden,
             ignore_patterns: anchor_input.ignore_patterns,
@@ -163,15 +173,15 @@ pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<Pr
 
     db.update_profile(&updated).map_err(|e| e.to_string())?;
 
-    // Replace anchors: delete all and re-insert
+    // Replace anchors: delete all and re-insert with tilde expansion
     db.delete_anchors_for_profile(uuid)
         .map_err(|e| e.to_string())?;
     for anchor_input in input.anchors {
         let anchor = syncstore::profiles::AnchorRow {
             id: 0,
             profile_id: uuid,
-            local_path: anchor_input.local_path,
-            remote_path: anchor_input.remote_path,
+            local_path: expand_tilde(&anchor_input.local_path),
+            remote_path: expand_tilde(&anchor_input.remote_path),
             max_depth: anchor_input.max_depth,
             include_hidden: anchor_input.include_hidden,
             ignore_patterns: anchor_input.ignore_patterns,

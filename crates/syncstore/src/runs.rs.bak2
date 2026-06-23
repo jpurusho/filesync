@@ -1,0 +1,79 @@
+use rusqlite::params;
+use uuid::Uuid;
+
+use crate::{Db, Result};
+
+#[derive(Debug, Clone)]
+pub struct RunRecordRow {
+    pub id: Uuid,
+    pub profile_id: Uuid,
+    pub started_at: String,
+    pub finished_at: String,
+    pub status: String,
+    pub files_transferred: u32,
+    pub files_deleted: u32,
+    pub conflicts_count: u32,
+    pub errors_count: u32,
+    pub error_summary: Option<String>,
+}
+
+impl Db {
+    pub fn insert_run(&self, run: &RunRecordRow) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        self.conn.execute(
+            "INSERT INTO run_records (id, profile_id, started_at, finished_at, status,
+             files_transferred, files_deleted, conflicts_count, errors_count, error_summary)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                run.id.to_string(),
+                run.profile_id.to_string(),
+                run.started_at,
+                run.finished_at,
+                run.status,
+                run.files_transferred,
+                run.files_deleted,
+                run.conflicts_count,
+                run.errors_count,
+                run.error_summary,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_runs(&self, profile_id: Uuid, limit: u32) -> Result<Vec<RunRecordRow>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = self.conn.prepare(
+            "SELECT id, profile_id, started_at, finished_at, status,
+                    files_transferred, files_deleted, conflicts_count, errors_count, error_summary
+             FROM run_records WHERE profile_id = ?1
+             ORDER BY started_at DESC LIMIT ?2",
+        )?;
+
+        let rows = stmt.query_map(params![profile_id.to_string(), limit], |row| {
+            Ok(RunRecordRow {
+                id: Uuid::parse_str(&row.get::<_, String>(0)?).unwrap_or_default(),
+                profile_id: Uuid::parse_str(&row.get::<_, String>(1)?).unwrap_or_default(),
+                started_at: row.get(2)?,
+                finished_at: row.get(3)?,
+                status: row.get(4)?,
+                files_transferred: row.get(5)?,
+                files_deleted: row.get(6)?,
+                conflicts_count: row.get(7)?,
+                errors_count: row.get(8)?,
+                error_summary: row.get(9)?,
+            })
+        })?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row?);
+        }
+        Ok(records)
+    }
+
+    pub fn get_latest_run(&self, profile_id: Uuid) -> Result<Option<RunRecordRow>> {
+        let conn = self.conn.lock().unwrap();
+        let runs = self.get_runs(profile_id, 1)?;
+        Ok(runs.into_iter().next())
+    }
+}
