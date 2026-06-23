@@ -2,7 +2,6 @@ mod commands;
 mod sync_executor;
 mod views;
 
-use std::sync::Mutex;
 use syncnet::identity::Identity;
 use syncstore::Db;
 
@@ -25,8 +24,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .manage(Mutex::new(db))
-        .manage(Mutex::new(identity))
+        .manage(db)
+        .manage(identity)
         .invoke_handler(tauri::generate_handler![
             ping,
             commands::list_profiles,

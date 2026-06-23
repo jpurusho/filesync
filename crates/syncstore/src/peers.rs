@@ -16,7 +16,8 @@ pub struct PeerRow {
 
 impl Db {
     pub fn insert_peer(&self, peer: &PeerRow) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "INSERT INTO peers (id, name, fingerprint, cert_pem)
              VALUES (?1, ?2, ?3, ?4)",
             params![
@@ -30,7 +31,8 @@ impl Db {
     }
 
     pub fn get_peer(&self, id: Uuid) -> Result<Option<PeerRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, name, fingerprint, cert_pem, paired_at, last_seen, is_online
              FROM peers WHERE id = ?1",
         )?;
@@ -55,7 +57,8 @@ impl Db {
     }
 
     pub fn list_peers(&self) -> Result<Vec<PeerRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, name, fingerprint, cert_pem, paired_at, last_seen, is_online
              FROM peers ORDER BY name",
         )?;
@@ -80,7 +83,8 @@ impl Db {
     }
 
     pub fn update_peer_online(&self, id: Uuid, is_online: bool, last_seen: &str) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "UPDATE peers SET is_online = ?2, last_seen = ?3 WHERE id = ?1",
             params![id.to_string(), i32::from(is_online), last_seen],
         )?;
@@ -88,8 +92,8 @@ impl Db {
     }
 
     pub fn delete_peer(&self, id: Uuid) -> Result<()> {
-        self.conn
-            .execute("DELETE FROM peers WHERE id = ?1", params![id.to_string()])?;
+        let conn = self.conn();
+        conn.execute("DELETE FROM peers WHERE id = ?1", params![id.to_string()])?;
         Ok(())
     }
 }

@@ -3,15 +3,14 @@ use crate::views::{
     ProfileView, StartSyncResult, SyncStatus,
 };
 use std::net::SocketAddr;
-use std::sync::Mutex;
 use syncnet::identity::Identity;
 use syncnet::pairing;
 use syncstore::{Db, profiles::ProfileRow};
-use tauri::State;
+use tauri::{Emitter, State};
 use uuid::Uuid;
 
-type DbState<'a> = State<'a, Mutex<Db>>;
-type IdentityState<'a> = State<'a, Mutex<Identity>>;
+type DbState<'a> = State<'a, Db>;
+type IdentityState<'a> = State<'a, Identity>;
 
 /// Helper to parse UUID from string with consistent error mapping
 fn parse_uuid(s: &str) -> Result<Uuid, String> {
@@ -22,7 +21,7 @@ fn parse_uuid(s: &str) -> Result<Uuid, String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn list_profiles(db: DbState) -> Result<Vec<ProfileView>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let profiles = db.list_profiles().map_err(|e| e.to_string())?;
 
     Ok(profiles
@@ -45,7 +44,7 @@ pub fn list_profiles(db: DbState) -> Result<Vec<ProfileView>, String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn get_profile(id: String, db: DbState) -> Result<ProfileDetail, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let uuid = parse_uuid(&id)?;
 
     let profile = db
@@ -86,7 +85,7 @@ pub fn get_profile(id: String, db: DbState) -> Result<ProfileDetail, String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn create_profile(input: ProfileInput, db: DbState) -> Result<ProfileView, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let id = Uuid::new_v4();
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -138,7 +137,7 @@ pub fn create_profile(input: ProfileInput, db: DbState) -> Result<ProfileView, S
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<ProfileView, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let uuid = parse_uuid(&id)?;
 
     let existing = db
@@ -197,7 +196,7 @@ pub fn update_profile(id: String, input: ProfileInput, db: DbState) -> Result<Pr
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn delete_profile(id: String, db: DbState) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let uuid = parse_uuid(&id)?;
 
     // Delete anchors first (foreign key cascade should handle this, but be explicit)
@@ -219,7 +218,7 @@ pub fn delete_profile(id: String, db: DbState) -> Result<(), String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn list_peers(db: DbState) -> Result<Vec<PeerView>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let peers = db.list_peers().map_err(|e| e.to_string())?;
 
     Ok(peers
@@ -239,7 +238,7 @@ pub fn list_peers(db: DbState) -> Result<Vec<PeerView>, String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn list_pending_deletions(db: DbState) -> Result<Vec<ProfileView>, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let profiles = db.list_pending_deletions().map_err(|e| e.to_string())?;
 
     Ok(profiles
@@ -262,7 +261,7 @@ pub fn list_pending_deletions(db: DbState) -> Result<Vec<ProfileView>, String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let uuid = parse_uuid(&id)?;
 
     db.delete_anchors_for_profile(uuid)
@@ -276,7 +275,7 @@ pub fn confirm_deletion(id: String, db: DbState) -> Result<(), String> {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn reject_deletion(id: String, db: DbState) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let uuid = parse_uuid(&id)?;
 
     db.clear_pending_deletion(uuid).map_err(|e| e.to_string())?;
@@ -303,7 +302,7 @@ pub fn get_sync_status(profile_id: String, _db: DbState) -> SyncStatus {
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn get_drift_summary(profile_id: String, db: DbState) -> Result<DriftSummary, String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let profile_uuid = parse_uuid(&profile_id)?;
 
     // Count tracked files using efficient SQL aggregate
@@ -339,7 +338,7 @@ pub async fn pair_peer(
 
     // Clone identity to avoid holding lock across await
     let identity_clone = {
-        let identity = identity.lock().map_err(|e| e.to_string())?;
+        let identity = &*identity;
         identity.clone()
     };
 
@@ -349,7 +348,7 @@ pub async fn pair_peer(
         .map_err(|e| e.to_string())?;
 
     // Store peer in database
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let peer_row = syncstore::peers::PeerRow {
         id: result.peer_id,
         name: result.peer_name.clone(),
@@ -373,7 +372,7 @@ pub async fn pair_peer(
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn unpair_peer(peer_id: String, db: DbState) -> Result<(), String> {
-    let db = db.lock().map_err(|e| e.to_string())?;
+    let db = &*db;
     let uuid = Uuid::parse_str(&peer_id).map_err(|e| e.to_string())?;
 
     db.delete_peer(uuid).map_err(|e| e.to_string())?;
@@ -383,23 +382,67 @@ pub fn unpair_peer(peer_id: String, db: DbState) -> Result<(), String> {
 
 /// Initiate a sync session (async operation).
 ///
-/// **Current implementation:** Stub only - returns immediately without transferring files.
-/// Real sync integration blocked by ADR-0019 (Db async access issue).
-/// See `sync_executor.rs` for prepared implementation and ADR-0019 for solution options.
+/// Triggers real file synchronization with the paired peer.
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub async fn start_sync(
     profile_id: String,
-    _peer_address: String,
+    peer_address: String,
     direction: String, // "push" | "pull" | "bidi"
-    _db: DbState<'_>,
-    _identity: IdentityState<'_>,
-    _app_handle: tauri::AppHandle,
+    db: DbState<'_>,
+    identity: IdentityState<'_>,
+    app_handle: tauri::AppHandle,
 ) -> Result<StartSyncResult, String> {
+    use crate::sync_executor;
+    use synccore::reconcile::SyncMode;
+
     let profile_uuid = parse_uuid(&profile_id)?;
     let run_id = Uuid::new_v4();
 
-    // Stub for MVP - real sync blocked by Db async access (ADR-0019)
+    // Parse sync mode
+    let mode = match direction.as_str() {
+        "push" => SyncMode::Push,
+        "pull" => SyncMode::Pull,
+        "bidi" => SyncMode::Bidirectional,
+        _ => return Err(format!("Invalid sync direction: {direction}")),
+    };
+
+    // Parse peer address
+    let addr: SocketAddr = peer_address
+        .parse()
+        .map_err(|e| format!("Invalid peer address: {e}"))?;
+
+    // Clone Db and Identity for async execution
+    let db_clone = db.inner().clone();
+    let identity_clone = identity.inner().clone();
+
+    // Spawn the sync operation
+    tokio::spawn(async move {
+        match sync_executor::execute_sync(profile_uuid, addr, mode, &identity_clone, &db_clone).await {
+            Ok(result) => {
+                let _ = app_handle.emit(
+                    "sync:complete",
+                    serde_json::json!({
+                        "run_id": run_id.to_string(),
+                        "profile_id": profile_uuid.to_string(),
+                        "files_synced": result.files_transferred,
+                        "bytes_transferred": result.bytes_transferred,
+                    }),
+                );
+            }
+            Err(e) => {
+                let _ = app_handle.emit(
+                    "sync:error",
+                    serde_json::json!({
+                        "run_id": run_id.to_string(),
+                        "profile_id": profile_uuid.to_string(),
+                        "error": e.to_string(),
+                    }),
+                );
+            }
+        }
+    });
+
     Ok(StartSyncResult {
         run_id: run_id.to_string(),
         profile_id: profile_uuid.to_string(),

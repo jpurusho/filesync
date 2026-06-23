@@ -19,7 +19,8 @@ pub struct QuickSendRecordRow {
 
 impl Db {
     pub fn insert_quick_send(&self, record: &QuickSendRecordRow) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "INSERT INTO quick_send_records (id, peer_id, direction, destination_dir,
              started_at, finished_at, status, files_transferred, bytes_transferred, error_summary)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -40,7 +41,8 @@ impl Db {
     }
 
     pub fn get_quick_sends(&self, limit: u32) -> Result<Vec<QuickSendRecordRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, peer_id, direction, destination_dir, started_at, finished_at,
                     status, files_transferred, bytes_transferred, error_summary
              FROM quick_send_records
@@ -74,7 +76,8 @@ impl Db {
         peer_id: Uuid,
         limit: u32,
     ) -> Result<Vec<QuickSendRecordRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, peer_id, direction, destination_dir, started_at, finished_at,
                     status, files_transferred, bytes_transferred, error_summary
              FROM quick_send_records WHERE peer_id = ?1

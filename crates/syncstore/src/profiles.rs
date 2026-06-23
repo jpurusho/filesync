@@ -32,7 +32,8 @@ pub struct AnchorRow {
 
 impl Db {
     pub fn insert_profile(&self, profile: &ProfileRow) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "INSERT INTO profiles (id, name, mode, delete_propagation, conflict_policy, peer_name, version, peer_id, origin_instance_id, pending_deletion)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
@@ -52,7 +53,8 @@ impl Db {
     }
 
     pub fn get_profile(&self, id: Uuid) -> Result<Option<ProfileRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, name, mode, delete_propagation, conflict_policy, peer_name, created_at, updated_at, version, peer_id, origin_instance_id, pending_deletion
              FROM profiles WHERE id = ?1",
         )?;
@@ -82,7 +84,8 @@ impl Db {
     }
 
     pub fn list_profiles(&self) -> Result<Vec<ProfileRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, name, mode, delete_propagation, conflict_policy, peer_name, created_at, updated_at, version, peer_id, origin_instance_id, pending_deletion
              FROM profiles WHERE pending_deletion = 0 ORDER BY name",
         )?;
@@ -112,7 +115,8 @@ impl Db {
     }
 
     pub fn update_profile(&self, profile: &ProfileRow) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "UPDATE profiles SET name = ?2, mode = ?3, delete_propagation = ?4,
              conflict_policy = ?5, peer_name = ?6, version = ?7, peer_id = ?8,
              origin_instance_id = ?9, pending_deletion = ?10,
@@ -135,7 +139,8 @@ impl Db {
     }
 
     pub fn delete_profile(&self, id: Uuid) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "DELETE FROM profiles WHERE id = ?1",
             params![id.to_string()],
         )?;
@@ -144,7 +149,8 @@ impl Db {
 
     pub fn insert_anchor(&self, anchor: &AnchorRow) -> Result<()> {
         let patterns_json = serde_json::to_string(&anchor.ignore_patterns).unwrap_or_default();
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "INSERT INTO anchors (profile_id, local_path, remote_path, max_depth, include_hidden, ignore_patterns)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
@@ -160,7 +166,8 @@ impl Db {
     }
 
     pub fn get_anchors(&self, profile_id: Uuid) -> Result<Vec<AnchorRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, profile_id, local_path, remote_path, max_depth, include_hidden, ignore_patterns
              FROM anchors WHERE profile_id = ?1 ORDER BY id",
         )?;
@@ -188,7 +195,8 @@ impl Db {
 
     /// List profiles that target a specific peer (for FR-PS-1).
     pub fn list_profiles_for_peer(&self, peer_id: Uuid) -> Result<Vec<ProfileRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, name, mode, delete_propagation, conflict_policy, peer_name, created_at, updated_at, version, peer_id, origin_instance_id, pending_deletion
              FROM profiles WHERE peer_id = ?1 AND pending_deletion = 0 ORDER BY name",
         )?;
@@ -219,7 +227,8 @@ impl Db {
 
     /// Increment profile version and update timestamp.
     pub fn increment_profile_version(&self, profile_id: Uuid) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "UPDATE profiles SET version = version + 1,
              updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
              WHERE id = ?1",
@@ -230,7 +239,8 @@ impl Db {
 
     /// Insert a profile tombstone (for deletion notification).
     pub fn insert_profile_tombstone(&self, profile_id: Uuid, deleted_at: &str) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "INSERT INTO profile_tombstones (profile_id, deleted_at, delivered)
              VALUES (?1, ?2, 0) ON CONFLICT(profile_id) DO UPDATE SET deleted_at = ?2, delivered = 0",
             params![profile_id.to_string(), deleted_at],
@@ -240,9 +250,8 @@ impl Db {
 
     /// List undelivered tombstones.
     pub fn list_undelivered_tombstones(&self) -> Result<Vec<(Uuid, String)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT profile_id, deleted_at FROM profile_tombstones WHERE delivered = 0")?;
+        let conn = self.conn();
+        let mut stmt = conn.prepare("SELECT profile_id, deleted_at FROM profile_tombstones WHERE delivered = 0")?;
 
         let rows = stmt.query_map([], |row| {
             let id_str: String = row.get(0)?;
@@ -259,7 +268,8 @@ impl Db {
 
     /// Mark a tombstone as delivered.
     pub fn mark_tombstone_delivered(&self, profile_id: Uuid) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "UPDATE profile_tombstones SET delivered = 1 WHERE profile_id = ?1",
             params![profile_id.to_string()],
         )?;
@@ -268,7 +278,8 @@ impl Db {
 
     /// Delete all anchors for a profile (used when replacing profile during replication).
     pub fn delete_anchors_for_profile(&self, profile_id: Uuid) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "DELETE FROM anchors WHERE profile_id = ?1",
             params![profile_id.to_string()],
         )?;
@@ -277,7 +288,8 @@ impl Db {
 
     /// List profiles pending deletion (for UI prompt).
     pub fn list_pending_deletions(&self) -> Result<Vec<ProfileRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, name, mode, delete_propagation, conflict_policy, peer_name, created_at, updated_at, version, peer_id, origin_instance_id, pending_deletion
              FROM profiles WHERE pending_deletion = 1 ORDER BY name",
         )?;
@@ -308,7 +320,8 @@ impl Db {
 
     /// Clear pending_deletion flag to restore profile to active state.
     pub fn clear_pending_deletion(&self, profile_id: Uuid) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "UPDATE profiles SET pending_deletion = 0 WHERE id = ?1",
             params![profile_id.to_string()],
         )?;

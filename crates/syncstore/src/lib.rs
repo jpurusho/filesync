@@ -7,6 +7,7 @@ pub mod runs;
 
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -20,13 +21,21 @@ pub enum StoreError {
 pub type Result<T> = std::result::Result<T, StoreError>;
 
 pub struct Db {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
+}
+
+impl Clone for Db {
+    fn clone(&self) -> Self {
+        Self {
+            conn: Arc::clone(&self.conn),
+        }
+    }
 }
 
 impl Db {
     /// Open or create a database at the given path with WAL mode enabled
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let conn = Connection::open_with_flags(
+        let mut conn = Connection::open_with_flags(
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE
                 | OpenFlags::SQLITE_OPEN_CREATE
@@ -37,36 +46,47 @@ impl Db {
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
-        let mut db = Self { conn };
-        db.run_migrations()?;
-        Ok(db)
+        // Run migrations before wrapping in Arc<Mutex>
+        let migrations = migrations::get_migrations();
+        migrations
+            .to_latest(&mut conn)
+            .map_err(|e| StoreError::Migration(e.to_string()))?;
+
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
     /// Open an in-memory database (for tests)
     pub fn in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
+        let mut conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
-        let mut db = Self { conn };
-        db.run_migrations()?;
-        Ok(db)
-    }
 
-    fn run_migrations(&mut self) -> Result<()> {
+        // Run migrations before wrapping in Arc<Mutex>
         let migrations = migrations::get_migrations();
         migrations
-            .to_latest(&mut self.conn)
+            .to_latest(&mut conn)
             .map_err(|e| StoreError::Migration(e.to_string()))?;
-        Ok(())
+
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 
     /// Get current schema version
     pub fn schema_version(&self) -> Result<String> {
-        let version: String = self.conn.query_row(
+        let conn = self.conn.lock().unwrap();
+        let version: String = conn.query_row(
             "SELECT value FROM meta WHERE key = 'schema_version'",
             [],
             |row| row.get(0),
         )?;
         Ok(version)
+    }
+
+    /// Get a locked reference to the connection for use in impl methods
+    pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn.lock().unwrap()
     }
 }
 

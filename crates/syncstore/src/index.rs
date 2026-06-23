@@ -16,7 +16,8 @@ pub struct IndexEntryRow {
 
 impl Db {
     pub fn load_index(&self, profile_id: Uuid, anchor_idx: usize) -> Result<Vec<IndexEntryRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT profile_id, anchor_idx, rel_path, kind, size, mtime_secs, hash
              FROM sync_index WHERE profile_id = ?1 AND anchor_idx = ?2",
         )?;
@@ -46,13 +47,15 @@ impl Db {
         anchor_idx: usize,
         entries: &[IndexEntryRow],
     ) -> Result<()> {
+        let conn = self.conn();
+
         // Clear old index for this anchor
-        self.conn.execute(
+        conn.execute(
             "DELETE FROM sync_index WHERE profile_id = ?1 AND anchor_idx = ?2",
             params![profile_id.to_string(), anchor_idx as i64],
         )?;
 
-        let mut stmt = self.conn.prepare(
+        let mut stmt = conn.prepare(
             "INSERT INTO sync_index (profile_id, anchor_idx, rel_path, kind, size, mtime_secs, hash)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         )?;
@@ -73,7 +76,8 @@ impl Db {
     }
 
     pub fn clear_index(&self, profile_id: Uuid) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "DELETE FROM sync_index WHERE profile_id = ?1",
             params![profile_id.to_string()],
         )?;
@@ -82,7 +86,8 @@ impl Db {
 
     /// Count tracked files for a profile (efficient SQL aggregate).
     pub fn count_tracked_files(&self, profile_id: Uuid) -> Result<u64> {
-        let count: i64 = self.conn.query_row(
+        let conn = self.conn();
+        let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM sync_index WHERE profile_id = ?1 AND kind = 'file'",
             params![profile_id.to_string()],
             |row| row.get(0),

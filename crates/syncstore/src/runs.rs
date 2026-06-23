@@ -19,7 +19,8 @@ pub struct RunRecordRow {
 
 impl Db {
     pub fn insert_run(&self, run: &RunRecordRow) -> Result<()> {
-        self.conn.execute(
+        let conn = self.conn();
+        conn.execute(
             "INSERT INTO run_records (id, profile_id, started_at, finished_at, status,
              files_transferred, files_deleted, conflicts_count, errors_count, error_summary)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
@@ -40,7 +41,8 @@ impl Db {
     }
 
     pub fn get_runs(&self, profile_id: Uuid, limit: u32) -> Result<Vec<RunRecordRow>> {
-        let mut stmt = self.conn.prepare(
+        let conn = self.conn();
+        let mut stmt = conn.prepare(
             "SELECT id, profile_id, started_at, finished_at, status,
                     files_transferred, files_deleted, conflicts_count, errors_count, error_summary
              FROM run_records WHERE profile_id = ?1
