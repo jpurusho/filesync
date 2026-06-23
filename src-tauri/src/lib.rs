@@ -16,10 +16,14 @@ pub fn run() {
 
     // Initialize database
     let db_path = syncplatform::app_db_path();
+
+    // Create app directory if it doesn't exist
+    let app_dir = db_path.parent().expect("db must have parent dir");
+    std::fs::create_dir_all(app_dir).expect("failed to create app directory");
+
     let db = Db::open(&db_path).expect("failed to open database");
 
     // Initialize or load identity
-    let app_dir = db_path.parent().expect("db must have parent dir");
     let identity = Identity::load_or_generate(app_dir).expect("failed to load/generate identity");
 
     tauri::Builder::default()
