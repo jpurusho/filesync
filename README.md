@@ -1,7 +1,7 @@
 # FileSync — P2P File Synchronization for macOS
 
-**Status:** M7 (MVP readiness) in progress  
-**Version:** 0.1.1  
+**Status:** M7 (MVP readiness) complete — ready for testing  
+**Version:** 0.3.2  
 **Platform:** macOS (MVP target)
 
 ## What This Is

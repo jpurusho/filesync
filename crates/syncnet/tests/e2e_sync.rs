@@ -152,7 +152,7 @@ async fn e2e_push_over_tls() {
         };
 
         let mut stream = framed(tls_stream);
-        run_remote_push(&mut stream, &config, &SyncIndex::default()).await
+        run_remote_push(&mut stream, &config, &SyncIndex::default(), None).await
     });
 
     let (server_result, client_result) = tokio::join!(server_handle, client_handle);
@@ -414,7 +414,7 @@ async fn run_bidi_test(
         };
 
         let mut stream = framed(tls);
-        run_remote_bidi(&mut stream, &config, &index).await
+        run_remote_bidi(&mut stream, &config, &index, None).await
     });
 
     let (srv, cli) = tokio::join!(server_handle, client_handle);
@@ -615,7 +615,7 @@ async fn e2e_push_updated_index() {
         };
 
         let mut stream = framed(tls);
-        syncnet::session::run_remote_push(&mut stream, &config, &SyncIndex::default()).await
+        syncnet::session::run_remote_push(&mut stream, &config, &SyncIndex::default(), None).await
     });
 
     let (srv, cli) = tokio::join!(server_handle, client_handle);

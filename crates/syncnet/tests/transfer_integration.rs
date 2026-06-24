@@ -60,7 +60,7 @@ async fn push_transfers_files_to_remote() {
     };
 
     let mut stream = framed(client_io);
-    let result = run_remote_push(&mut stream, &config, &SyncIndex::default())
+    let result = run_remote_push(&mut stream, &config, &SyncIndex::default(), None)
         .await
         .unwrap();
 
@@ -123,7 +123,7 @@ async fn pull_transfers_files_from_remote() {
     };
 
     let mut stream = framed(client_io);
-    let result = run_remote_pull(&mut stream, &config, &SyncIndex::default())
+    let result = run_remote_pull(&mut stream, &config, &SyncIndex::default(), None)
         .await
         .unwrap();
 
@@ -182,7 +182,7 @@ async fn push_only_transfers_changed_files() {
         };
 
         let mut stream = framed(client_io);
-        let result = run_remote_push(&mut stream, &config, &SyncIndex::default())
+        let result = run_remote_push(&mut stream, &config, &SyncIndex::default(), None)
             .await
             .unwrap();
         assert_eq!(result.files_transferred, 1); // existing.txt
@@ -225,7 +225,7 @@ async fn push_only_transfers_changed_files() {
     // appear as "Created", meaning both get pushed.
     // This is correct behavior: empty index = first sync = transfer everything.
     let mut stream = framed(client_io);
-    let result = run_remote_push(&mut stream, &config, &SyncIndex::default())
+    let result = run_remote_push(&mut stream, &config, &SyncIndex::default(), None)
         .await
         .unwrap();
 
@@ -279,7 +279,7 @@ async fn push_invalid_anchor_is_rejected() {
     };
 
     let mut stream = framed(client_io);
-    let result = run_remote_push(&mut stream, &config, &SyncIndex::default()).await;
+    let result = run_remote_push(&mut stream, &config, &SyncIndex::default(), None).await;
 
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
