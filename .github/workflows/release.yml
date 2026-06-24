@@ -26,14 +26,8 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
-        run: |
-          cd ui
-          pnpm install
-
-      - name: Build Tauri app
-        run: |
-          cargo tauri build
+      - name: Build release
+        run: make build
 
       - name: Create latest.json
         run: |
