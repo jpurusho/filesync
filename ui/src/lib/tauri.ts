@@ -133,3 +133,35 @@ export const commands = {
   getNetworkInfo: () => invoke<NetworkInfo>("get_network_info"),
   listDiscoveredPeers: () => invoke<DiscoveredPeer[]>("list_discovered_peers"),
 };
+
+// Updater API (from tauri-plugin-updater)
+export async function checkForUpdates(): Promise<{
+  shouldUpdate: boolean;
+  currentVersion: string;
+  latestVersion?: string;
+}> {
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+
+  if (update?.available) {
+    return {
+      shouldUpdate: true,
+      currentVersion: update.currentVersion,
+      latestVersion: update.version,
+    };
+  }
+
+  return {
+    shouldUpdate: false,
+    currentVersion: update?.currentVersion || "unknown",
+  };
+}
+
+export async function installUpdate(): Promise<void> {
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+
+  if (update?.available) {
+    await update.downloadAndInstall();
+  }
+}

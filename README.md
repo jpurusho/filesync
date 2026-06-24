@@ -87,6 +87,24 @@ npm run tauri build
 2. **Launch** `FileSync.app`
 3. **Grant permissions** if macOS prompts for network/filesystem access
 
+### Auto-Updates
+
+FileSync can update itself automatically:
+
+1. Click **"Check Updates"** in the header (or wait for automatic check on launch)
+2. If an update is available, click **"Update Available"** to download and install
+3. Restart the app after installation
+
+Updates are fetched from GitHub releases. To publish a new version:
+
+```bash
+# Tag and push (triggers GitHub Actions to build and publish)
+git tag v0.1.1 -m "Release v0.1.1"
+git push origin v0.1.1
+
+# All instances can now update via the "Check Updates" button
+```
+
 ## User Guide (Quick Start)
 
 ### 1. Pair with another computer
