@@ -1,7 +1,7 @@
 # FileSync — P2P File Synchronization for macOS
 
-**Status:** MVP complete (M0-M6), ready for testing  
-**Version:** 0.1.0  
+**Status:** M7 (MVP readiness) in progress  
+**Version:** 0.1.1  
 **Platform:** macOS (MVP target)
 
 ## What This Is
@@ -64,10 +64,11 @@ FileSync is a peer-to-peer file synchronization application built with Tauri (Ru
 ### Development Build
 
 ```bash
-# Install UI dependencies
-cd ui && npm install
+# Install dependencies and run dev mode
+make dev
 
-# Run in dev mode (hot reload)
+# Or manually:
+cd ui && npm install
 npm run tauri dev
 ```
 
@@ -75,10 +76,26 @@ npm run tauri dev
 
 ```bash
 # Build optimized binary + .app bundle
+make build
+
+# Or manually:
 npm run tauri build
 
 # Find the built app at:
 # src-tauri/target/release/bundle/macos/filesync.app
+```
+
+### Development Tasks
+
+The project includes a Makefile for common tasks:
+
+```bash
+make dev          # Run in development mode
+make build        # Production build
+make test         # Run all tests
+make check        # Check formatting and linting
+make fmt          # Auto-format code
+make clean        # Clean build artifacts
 ```
 
 ## Install & Run
@@ -149,7 +166,9 @@ If a peer deletes a profile:
 - **Confirm:** Profile deleted locally too
 - **Reject:** Profile remains active, peer's deletion ignored
 
-## Milestones Completed
+## Milestones
+
+### Completed
 
 - **M0:** Scaffolding (Tauri + React, crate structure)
 - **M1:** Local sync engine (scan, diff, reconcile, apply)
@@ -160,16 +179,37 @@ If a peer deletes a profile:
 - **M5:** Profile replication (share configs, tombstones)
 - **M6:** Tauri UI (profiles, peers, sync controls, deletion/conflict UX)
 
-## Known Limitations (MVP)
+### In Progress (M7 — MVP Readiness)
+
+- Integration testing and bug fixes
+- Network services auto-start on launch (ADR-0020)
+- Security hardening: path traversal protection (ADR-0021)
+- Auto-updater for seamless version distribution (ADR-0022)
+- Build automation with Makefile (ADR-0023)
+
+## Current Status & Known Limitations
+
+### Working Features
+
+- ✅ **Automatic peer discovery** via mDNS on LAN
+- ✅ **Secure pairing** with TOFU TLS (self-signed certificates)
+- ✅ **Profile management** (create, edit, delete, replicate to peers)
+- ✅ **Network services** auto-start on app launch
+- ✅ **Auto-updates** via Tauri updater (GitHub releases)
+- ✅ **Dark theme** UI with modern React components
+- ✅ **Path traversal protection** for secure file operations
+
+### Known Limitations (MVP)
 
 - **macOS only** — Linux/Windows support deferred to Phase 2
 - **Two peers only** — No multi-peer topologies (>2 nodes)
 - **No delta sync** — Whole files transferred (chunk/block-level deferred)
 - **No auto-trigger** — Manual sync only (filesystem watch deferred)
-- **Real sync integration blocked** — See ADR-0019 (async Db access issue)
+- ⚠️ **Real sync integration blocked** — See ADR-0019 (async Db access issue)
   - Sync button currently stubbed in UI (returns immediately without transferring files)
-  - Three solutions documented in ADR-0019, requires architectural decision
-  - See `docs/decisions/0019-tauri-sync-integration-blocker.md`
+  - Three solutions documented: Arc-wrapped Db (recommended), connection pool, or pre-load data
+  - See `docs/decisions/0019-tauri-sync-integration-blocker.md` for details
+  - Core sync engine and network layer are fully functional and tested
 
 ## Testing Status
 
@@ -185,7 +225,8 @@ cargo test --all
 
 ## Documentation
 
-- **Decisions (ADRs):** `docs/decisions/` — all architectural decisions numbered sequentially
+- **Project Guide:** `CLAUDE.md` — architecture overview, working style, reading order
+- **Decisions (ADRs):** `docs/decisions/` — all architectural decisions (0001-0023)
 - **Milestone Plans:** `docs/plans/` — detailed implementation plans for M0-M7
 - **Spec:** `FileSync_Requirements_Spec.md` — functional and non-functional requirements
 
@@ -209,11 +250,16 @@ cargo test --all
 
 ### Run tests
 ```bash
+make test        # Run all tests
+# Or manually:
 cargo test --all
 ```
 
 ### Lint and format
 ```bash
+make check       # Check formatting and clippy
+make fmt         # Auto-format all code
+# Or manually:
 cargo clippy --all-targets
 cargo fmt --all
 ```
@@ -224,6 +270,10 @@ cargo fmt --all
 # ~/Library/Application Support/com.filesync.app/filesync.db
 sqlite3 ~/Library/Application\ Support/com.filesync.app/filesync.db
 ```
+
+### Architecture
+
+See `CLAUDE.md` for detailed architecture and working style guidance. Key decisions are recorded as ADRs in `docs/decisions/`, numbered sequentially (currently 0001-0023).
 
 ## Contributing
 
