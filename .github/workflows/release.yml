@@ -26,13 +26,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install dependencies
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Install UI dependencies
         working-directory: ui
         run: pnpm install
 
       - name: Build release
-        working-directory: ui
-        run: pnpm tauri build
+        run: cargo tauri build
 
       - name: Create latest.json
         run: |
