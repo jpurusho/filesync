@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useStore } from "../store";
-import { commands, SyncProgressEvent, SyncCompleteEvent } from "../lib/tauri";
+import { commands, SyncProgressEvent, SyncCompleteEvent, DiscoveredPeer } from "../lib/tauri";
 
 interface SyncRun {
   runId: string;
@@ -18,13 +18,28 @@ interface SyncRun {
 }
 
 export function ActivityPage() {
-  const { profiles, fetchProfiles } = useStore();
+  const { profiles, fetchProfiles, peers, fetchPeers } = useStore();
   const [runs, setRuns] = useState<SyncRun[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [syncing, setSyncing] = useState(false);
+  const [discoveredPeers, setDiscoveredPeers] = useState<DiscoveredPeer[]>([]);
 
   useEffect(() => {
     fetchProfiles();
+    fetchPeers();
+
+    // Fetch discovered peers periodically to get current addresses
+    const fetchDiscovered = async () => {
+      try {
+        const discovered = await commands.listDiscoveredPeers();
+        setDiscoveredPeers(discovered);
+      } catch (error) {
+        console.error("Failed to fetch discovered peers:", error);
+      }
+    };
+
+    fetchDiscovered();
+    const interval = setInterval(fetchDiscovered, 5000); // Refresh every 5 seconds
 
     const unlistenProgress = listen<SyncProgressEvent>("sync-progress", (event) => {
       setRuns((prev) =>
@@ -75,8 +90,9 @@ export function ActivityPage() {
       unlistenProgress.then((fn) => fn());
       unlistenComplete.then((fn) => fn());
       unlistenError.then((fn) => fn());
+      clearInterval(interval);
     };
-  }, [fetchProfiles]);
+  }, [fetchProfiles, fetchPeers]);
 
   const handleSync = async (direction: "push" | "pull" | "bidi") => {
     if (!selectedProfile) {
@@ -84,10 +100,32 @@ export function ActivityPage() {
       return;
     }
 
+    const profile = profiles.find((p) => p.id === selectedProfile);
+    if (!profile || !profile.peer_name) {
+      alert("Profile must have a paired peer");
+      return;
+    }
+
+    // Find the paired peer
+    const peer = peers.find((pr) => pr.name === profile.peer_name);
+    if (!peer) {
+      alert(`Peer "${profile.peer_name}" not found. Please pair with this peer first.`);
+      return;
+    }
+
+    // Find the discovered peer to get current address
+    const discovered = discoveredPeers.find((dp) => dp.id === peer.id);
+    if (!discovered || discovered.addresses.length === 0) {
+      alert(`Peer "${profile.peer_name}" is not currently discoverable. Please ensure the peer is running on the network.`);
+      return;
+    }
+
+    // Use the first available address
+    const peerAddress = discovered.addresses[0];
+
     setSyncing(true);
     try {
-      const result = await commands.startSync(selectedProfile, direction);
-      const profile = profiles.find((p) => p.id === selectedProfile);
+      const result = await commands.startSync(selectedProfile, peerAddress, direction);
 
       setRuns((prev) => [
         {
@@ -107,6 +145,16 @@ export function ActivityPage() {
       setSyncing(false);
     }
   };
+
+  // Check if selected profile has a discoverable peer
+  const selectedProfileData = selectedProfile ? profiles.find((p) => p.id === selectedProfile) : null;
+  const selectedPeer = selectedProfileData?.peer_name
+    ? peers.find((pr) => pr.name === selectedProfileData.peer_name)
+    : null;
+  const isPeerDiscoverable = selectedPeer
+    ? discoveredPeers.some((dp) => dp.id === selectedPeer.id && dp.addresses.length > 0)
+    : false;
+  const canSync = selectedProfile && selectedProfileData?.peer_name && isPeerDiscoverable;
 
   return (
     <div className="p-6">
@@ -133,24 +181,33 @@ export function ActivityPage() {
                 </option>
               ))}
             </select>
+            {selectedProfile && selectedProfileData && !selectedProfileData.peer_name && (
+              <p className="text-xs text-yellow-400 mt-1">⚠ Profile has no paired peer</p>
+            )}
+            {selectedProfile && selectedProfileData?.peer_name && !isPeerDiscoverable && (
+              <p className="text-xs text-red-400 mt-1">⚠ Peer not discoverable on network</p>
+            )}
+            {selectedProfile && selectedProfileData?.peer_name && isPeerDiscoverable && (
+              <p className="text-xs text-green-400 mt-1">✓ Peer online and ready</p>
+            )}
           </div>
           <button
             onClick={() => handleSync("push")}
-            disabled={syncing || !selectedProfile}
+            disabled={syncing || !canSync}
             className="px-4 py-2 bg-blue-600/80 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40 transition-colors"
           >
             Push
           </button>
           <button
             onClick={() => handleSync("pull")}
-            disabled={syncing || !selectedProfile}
+            disabled={syncing || !canSync}
             className="px-4 py-2 bg-green-600/80 text-white rounded-lg hover:bg-green-500 disabled:opacity-40 transition-colors"
           >
             Pull
           </button>
           <button
             onClick={() => handleSync("bidi")}
-            disabled={syncing || !selectedProfile}
+            disabled={syncing || !canSync}
             className="px-4 py-2 bg-purple-600/80 text-white rounded-lg hover:bg-purple-500 disabled:opacity-40 transition-colors"
           >
             Bidi

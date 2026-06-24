@@ -129,7 +129,7 @@ export const commands = {
   rejectDeletion: (id: string) => invoke<void>("reject_deletion", { id }),
   getSyncStatus: (profileId: string) => invoke<SyncStatus>("get_sync_status", { profileId }),
   getDriftSummary: (profileId: string) => invoke<DriftSummary>("get_drift_summary", { profileId }),
-  startSync: (profileId: string, direction: string) => invoke<StartSyncResult>("start_sync", { profileId, direction }),
+  startSync: (profileId: string, peerAddress: string, direction: string) => invoke<StartSyncResult>("start_sync", { profileId, peerAddress, direction }),
   getNetworkInfo: () => invoke<NetworkInfo>("get_network_info"),
   listDiscoveredPeers: () => invoke<DiscoveredPeer[]>("list_discovered_peers"),
 };
