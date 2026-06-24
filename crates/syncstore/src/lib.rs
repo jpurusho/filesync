@@ -7,7 +7,7 @@ pub mod runs;
 
 use rusqlite::{Connection, OpenFlags};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -20,8 +20,26 @@ pub enum StoreError {
 
 pub type Result<T> = std::result::Result<T, StoreError>;
 
+/// A wrapper around rusqlite::Connection that is Send + Sync.
+/// This is safe because we open the connection with SQLITE_OPEN_FULLMUTEX,
+/// which enables SQLite's internal thread-safe serialization.
+struct SendableConnection(Connection);
+
+// SAFETY: rusqlite::Connection with FULLMUTEX is thread-safe.
+// SQLite serializes all access internally when opened with FULLMUTEX.
+unsafe impl Send for SendableConnection {}
+unsafe impl Sync for SendableConnection {}
+
+impl std::ops::Deref for SendableConnection {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 pub struct Db {
-    conn: Arc<Mutex<Connection>>,
+    conn: Arc<SendableConnection>,
 }
 
 impl Clone for Db {
@@ -39,21 +57,21 @@ impl Db {
             path,
             OpenFlags::SQLITE_OPEN_READ_WRITE
                 | OpenFlags::SQLITE_OPEN_CREATE
-                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
         )?;
 
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
-        // Run migrations before wrapping in Arc<Mutex>
+        // Run migrations before wrapping in Arc
         let migrations = migrations::get_migrations();
         migrations
             .to_latest(&mut conn)
             .map_err(|e| StoreError::Migration(e.to_string()))?;
 
         Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
+            conn: Arc::new(SendableConnection(conn)),
         })
     }
 
@@ -62,21 +80,20 @@ impl Db {
         let mut conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
-        // Run migrations before wrapping in Arc<Mutex>
+        // Run migrations before wrapping in Arc
         let migrations = migrations::get_migrations();
         migrations
             .to_latest(&mut conn)
             .map_err(|e| StoreError::Migration(e.to_string()))?;
 
         Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
+            conn: Arc::new(SendableConnection(conn)),
         })
     }
 
     /// Get current schema version
     pub fn schema_version(&self) -> Result<String> {
-        let conn = self.conn.lock().unwrap();
-        let version: String = conn.query_row(
+        let version: String = self.conn.query_row(
             "SELECT value FROM meta WHERE key = 'schema_version'",
             [],
             |row| row.get(0),
@@ -84,9 +101,9 @@ impl Db {
         Ok(version)
     }
 
-    /// Get a locked reference to the connection for use in impl methods
-    pub(crate) fn conn(&self) -> std::sync::MutexGuard<'_, Connection> {
-        self.conn.lock().unwrap()
+    /// Get a reference to the connection for use in impl methods
+    pub(crate) fn conn(&self) -> &Connection {
+        &self.conn
     }
 }
 

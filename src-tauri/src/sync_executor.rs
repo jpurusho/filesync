@@ -19,7 +19,6 @@ use syncnet::tls;
 use syncnet::transport::framed;
 use syncstore::Db;
 
-#[allow(dead_code)] // Will be used when async Db access is resolved
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
     #[error("Profile not found: {0}")]
@@ -51,7 +50,6 @@ impl From<syncstore::StoreError> for SyncError {
 }
 
 /// Execute a sync session for the given profile
-#[allow(dead_code)] // Will be used when async Db access is resolved
 pub async fn execute_sync(
     profile_id: Uuid,
     peer_address: SocketAddr,
@@ -147,7 +145,6 @@ pub async fn execute_sync(
 }
 
 /// Load the sync index for a profile from the database
-#[allow(dead_code)] // Will be used when async Db access is resolved
 fn load_sync_index(
     db: &Db,
     profile_id: Uuid,
@@ -184,7 +181,6 @@ fn load_sync_index(
 }
 
 /// Save the updated sync index to the database
-#[allow(dead_code)] // Will be used when async Db access is resolved
 fn save_sync_index(
     db: &Db,
     profile_id: Uuid,
