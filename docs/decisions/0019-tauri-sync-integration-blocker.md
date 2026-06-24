@@ -1,7 +1,8 @@
 # ADR 0019 — Tauri Sync Integration Blocker (Db + Async)
 
 **Date:** 2026-06-18  
-**Status:** Accepted (blocking real sync integration in Tauri UI)
+**Status:** Resolved (see ADR-0024 for implementation)  
+**Resolution Date:** 2026-06-23
 
 ## Context
 
@@ -94,8 +95,23 @@ Estimated effort: ~1 hour (change + test).
 
 The network layer (`syncnet`) and sync engine (`synccore`) are pure Rust with no UI/async boundary. Tests use in-memory Db and don't cross the managed-state + Tauri-command barrier. The issue only surfaces when integrating into Tauri's async command layer.
 
+## Resolution
+
+**Implemented:** 2026-06-23 via ADR-0024
+
+Option 1 (Arc-wrapped Db) was implemented successfully:
+- Changed to `SQLITE_OPEN_FULL_MUTEX` for thread-safe connection
+- Created `SendableConnection` wrapper with `unsafe impl Send + Sync`
+- Replaced `Arc<Mutex<Connection>>` with `Arc<SendableConnection>`
+- Removed all `#[allow(dead_code)]` from sync executor
+
+All tests pass. Sync button now triggers real file transfers.
+
+See ADR-0024 for full implementation details and consequences.
+
 ## Related
 
+- ADR-0024: Implementation of Option 1 resolution
 - M7 plan (`docs/plans/M7-mvp-readiness.md`) — Phase 1 sync integration task
-- `src-tauri/src/sync_executor.rs` — prepared but not wired due to this blocker
-- FR-SM-1..6 in spec — sync modes blocked from UI testing
+- `src-tauri/src/sync_executor.rs` — now fully functional
+- FR-SM-1..6 in spec — sync modes now functional in UI
