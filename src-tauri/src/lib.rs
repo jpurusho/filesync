@@ -1,9 +1,12 @@
 mod commands;
+pub mod network;
 mod sync_executor;
 mod views;
 
+use network::SharedNetworkState;
 use syncnet::identity::Identity;
 use syncstore::Db;
+use tauri::Manager;
 
 #[tauri::command]
 fn ping() -> &'static str {
@@ -26,10 +29,36 @@ pub fn run() {
     // Initialize or load identity
     let identity = Identity::load_or_generate(app_dir).expect("failed to load/generate identity");
 
+    // Create shared network state (filled async during setup)
+    let shared_net = SharedNetworkState::new();
+
+    // Clone for async setup closure
+    let identity_for_net = identity.clone();
+    let db_for_net = db.clone();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(db)
         .manage(identity)
+        .manage(shared_net)
+        .setup(move |app| {
+            let net_state: SharedNetworkState = app.state::<SharedNetworkState>().inner().clone();
+            tauri::async_runtime::spawn(async move {
+                match network::start_network(&identity_for_net, &db_for_net).await {
+                    Ok(state) => {
+                        tracing::info!(
+                            addr = %state.listen_addr,
+                            "network services started"
+                        );
+                        net_state.set(state).await;
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to start network services: {e}");
+                    }
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             ping,
             commands::list_profiles,
@@ -46,6 +75,8 @@ pub fn run() {
             commands::reject_deletion,
             commands::get_sync_status,
             commands::get_drift_summary,
+            commands::get_network_info,
+            commands::list_discovered_peers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

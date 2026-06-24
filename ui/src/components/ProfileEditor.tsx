@@ -63,7 +63,6 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
           );
         }
       } catch (error) {
-        console.error("Failed to load profile:", error);
         alert("Failed to load profile");
       } finally {
         setLoading(false);
@@ -134,7 +133,6 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
       onSave();
       onClose();
     } catch (error) {
-      console.error("Failed to save profile:", error);
       alert(`Failed to save profile: ${error}`);
     } finally {
       setSaving(false);
@@ -143,38 +141,38 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-          <p className="text-gray-500">Loading...</p>
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="glass-card p-6 max-w-3xl w-full">
+          <p className="text-gray-400">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <h3 className="text-xl font-semibold mb-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="glass-card p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <h3 className="text-xl font-semibold text-white mb-4">
           {profileId ? "Edit Profile" : "Create Profile"}
         </h3>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-300 mb-1">
               Profile Name
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-gray-500"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Peer <span className="text-gray-400 text-xs">(optional - can be set later)</span>
+            <label className="block text-sm font-medium text-gray-300 mb-1">
+              Peer <span className="text-gray-500 text-xs">(optional)</span>
             </label>
             <select
               value={peerId}
@@ -184,47 +182,47 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                 if (peer) setPeerName(peer.name);
                 else setPeerName("");
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
-              <option value="">No peer (configure later)</option>
+              <option value="" className="bg-gray-900">No peer (configure later)</option>
               {peers.map((peer) => (
-                <option key={peer.id} value={peer.id}>
+                <option key={peer.id} value={peer.id} className="bg-gray-900">
                   {peer.name}
                 </option>
               ))}
             </select>
             {peers.length === 0 && (
               <p className="text-sm text-gray-500 mt-1">
-                No peers paired yet. You can add anchors now and pair later.
+                No peers paired yet. Add anchors now, pair later.
               </p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mode</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Mode</label>
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
-              <option value="push">Push (local → remote)</option>
-              <option value="pull">Pull (remote → local)</option>
-              <option value="bidi">Bidirectional</option>
+              <option value="push" className="bg-gray-900">Push (local &rarr; remote)</option>
+              <option value="pull" className="bg-gray-900">Pull (remote &rarr; local)</option>
+              <option value="bidi" className="bg-gray-900">Bidirectional</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-300 mb-1">
               Conflict Policy
             </label>
             <select
               value={conflictPolicy}
               onChange={(e) => setConflictPolicy(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
             >
-              <option value="newer_wins">Newer Wins</option>
-              <option value="local_wins">Local Wins</option>
-              <option value="remote_wins">Remote Wins</option>
+              <option value="newer_wins" className="bg-gray-900">Newer Wins</option>
+              <option value="local_wins" className="bg-gray-900">Local Wins</option>
+              <option value="remote_wins" className="bg-gray-900">Remote Wins</option>
             </select>
           </div>
 
@@ -233,36 +231,36 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
               type="checkbox"
               checked={deletePropagation}
               onChange={(e) => setDeletePropagation(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-600 focus:ring-blue-500/50"
             />
-            <label className="ml-2 block text-sm text-gray-700">
+            <label className="ml-2 block text-sm text-gray-300">
               Propagate deletions to peer
             </label>
           </div>
 
           <div>
             <div className="flex justify-between items-center mb-2">
-              <label className="block text-sm font-medium text-gray-700">Anchors</label>
+              <label className="block text-sm font-medium text-gray-300">Anchors</label>
               <button
                 type="button"
                 onClick={handleAddAnchor}
-                className="text-sm text-blue-600 hover:text-blue-700"
+                className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
               >
                 + Add Anchor
               </button>
             </div>
 
             {anchors.map((anchor, index) => (
-              <div key={index} className="border border-gray-200 rounded-md p-4 mb-3">
+              <div key={index} className="bg-white/5 border border-white/10 rounded-lg p-4 mb-3">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-gray-300">
                     Anchor {index + 1}
                   </span>
                   {anchors.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveAnchor(index)}
-                      className="text-sm text-red-600 hover:text-red-700"
+                      className="text-sm text-red-400 hover:text-red-300 transition-colors"
                     >
                       Remove
                     </button>
@@ -271,7 +269,7 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Local Path</label>
+                    <label className="block text-xs text-gray-400 mb-1">Local Path</label>
                     <input
                       type="text"
                       value={anchor.local_path}
@@ -279,13 +277,13 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                         handleAnchorChange(index, "local_path", e.target.value)
                       }
                       placeholder="~/Documents or /path/to/local/folder"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-gray-600"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Remote Path</label>
+                    <label className="block text-xs text-gray-400 mb-1">Remote Path</label>
                     <input
                       type="text"
                       value={anchor.remote_path}
@@ -293,13 +291,13 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                         handleAnchorChange(index, "remote_path", e.target.value)
                       }
                       placeholder="~/Documents or /path/to/remote/folder"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-gray-600"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">
+                    <label className="block text-xs text-gray-400 mb-1">
                       Max Depth (levels)
                     </label>
                     <input
@@ -309,7 +307,7 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                         handleAnchorChange(index, "max_depth", parseInt(e.target.value))
                       }
                       min="1"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     />
                   </div>
 
@@ -320,23 +318,23 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
                       onChange={(e) =>
                         handleAnchorChange(index, "include_hidden", e.target.checked)
                       }
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 rounded border-white/20 bg-white/5 text-blue-600 focus:ring-blue-500/50"
                     />
-                    <label className="ml-2 block text-xs text-gray-600">
+                    <label className="ml-2 block text-xs text-gray-400">
                       Include hidden files
                     </label>
                   </div>
 
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">
+                    <label className="block text-xs text-gray-400 mb-1">
                       Ignore Patterns (one per line)
                     </label>
                     <textarea
                       value={anchor.ignore_patterns.join("\n")}
                       onChange={(e) => handleIgnorePatternsChange(index, e.target.value)}
-                      placeholder="node_modules&#10;*.log&#10;.git"
+                      placeholder={"node_modules\n*.log\n.git"}
                       rows={3}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                      className="w-full px-3 py-2 text-sm bg-white/5 border border-white/10 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-mono placeholder-gray-600"
                     />
                   </div>
                 </div>
@@ -344,18 +342,18 @@ export function ProfileEditor({ profileId, onClose, onSave }: ProfileEditorProps
             ))}
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              className="px-4 py-2 border border-white/10 text-gray-300 rounded-lg hover:bg-white/5 transition-colors"
               disabled={saving}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-500 hover:to-purple-500 disabled:opacity-50 transition-all"
               disabled={saving}
             >
               {saving ? "Saving..." : profileId ? "Update" : "Create"}

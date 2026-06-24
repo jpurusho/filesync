@@ -110,3 +110,21 @@ pub struct StartSyncResult {
     pub profile_id: String,
     pub direction: String,
 }
+
+/// Network info for display in UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkInfoView {
+    pub listen_address: String,
+    pub listen_port: u16,
+    pub fingerprint: String,
+    pub hostname: String,
+}
+
+/// A peer discovered via mDNS
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoveredPeerView {
+    pub id: String,
+    pub name: String,
+    pub addresses: Vec<String>,
+    pub fingerprint_short: String,
+}

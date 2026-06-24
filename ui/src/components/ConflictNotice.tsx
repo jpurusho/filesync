@@ -5,7 +5,7 @@ interface ConflictNoticeProps {
 
 export function ConflictNotice({ profileName, onClose }: ConflictNoticeProps) {
   return (
-    <div className="fixed top-4 right-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded shadow-lg max-w-md z-50">
+    <div className="fixed top-4 right-4 glass-card p-4 max-w-md z-50 border-yellow-500/30 bg-gradient-to-r from-yellow-500/10 to-orange-500/5">
       <div className="flex">
         <div className="flex-shrink-0">
           <svg
@@ -21,16 +21,16 @@ export function ConflictNotice({ profileName, onClose }: ConflictNoticeProps) {
           </svg>
         </div>
         <div className="ml-3 flex-1">
-          <h3 className="text-sm font-medium text-yellow-800">Profile Conflict Resolved</h3>
-          <p className="mt-1 text-sm text-yellow-700">
-            The profile <strong>{profileName}</strong> was modified by your peer. The
+          <h3 className="text-sm font-medium text-yellow-200">Profile Conflict Resolved</h3>
+          <p className="mt-1 text-sm text-yellow-300/80">
+            The profile <strong className="text-white">{profileName}</strong> was modified by your peer. The
             latest version has been applied.
           </p>
         </div>
         <div className="ml-3">
           <button
             onClick={onClose}
-            className="text-yellow-400 hover:text-yellow-600"
+            className="text-gray-500 hover:text-gray-300 transition-colors"
           >
             <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path

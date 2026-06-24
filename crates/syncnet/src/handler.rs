@@ -29,6 +29,17 @@ struct SessionState {
     allowed_anchors: HashMap<Uuid, PathBuf>,
 }
 
+fn validate_rel_path(path: &RelPath) -> Result<(), RpcResponse> {
+    if !path.is_safe() {
+        return Err(RpcResponse::Error {
+            code: ErrorCode::AccessDenied,
+            message: format!("path traversal rejected: {}", path.display()),
+        });
+    }
+    Ok(())
+}
+
+
 pub struct SyncHandler {
     peer_id: Uuid,
     instance_id: Uuid,
@@ -353,6 +364,7 @@ impl SyncHandler {
             })?;
 
         for path in paths {
+            validate_rel_path(path)?;
             let full = root.join(path.to_path_buf());
             if !full.is_file() {
                 return Err(RpcResponse::Error {
@@ -384,6 +396,7 @@ impl SyncHandler {
                 message: format!("anchor {anchor_id} not allowed"),
             })?;
 
+        validate_rel_path(path)?;
         let dest = root.join(path.to_path_buf());
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent).map_err(|e| RpcResponse::Error {
@@ -415,6 +428,12 @@ impl SyncHandler {
             };
         };
 
+        if !path.is_safe() {
+            return RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("path traversal rejected: {}", path.display()),
+            };
+        }
         let full = root.join(path.to_path_buf());
         if let Err(e) = fs::create_dir_all(&full) {
             return RpcResponse::Error {
@@ -446,6 +465,12 @@ impl SyncHandler {
             };
         };
 
+        if !path.is_safe() {
+            return RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("path traversal rejected: {}", path.display()),
+            };
+        }
         let full = root.join(path.to_path_buf());
         let result = if full.is_dir() {
             fs::remove_dir_all(&full)
@@ -485,6 +510,18 @@ impl SyncHandler {
             };
         };
 
+        if !path.is_safe() {
+            return RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("path traversal rejected: {}", path.display()),
+            };
+        }
+        if new_name.contains("../") || new_name.starts_with('/') || new_name.ends_with("..") || new_name == ".." {
+            return RpcResponse::Error {
+                code: ErrorCode::AccessDenied,
+                message: format!("path traversal rejected: {new_name}"),
+            };
+        }
         let from = root.join(path.to_path_buf());
         let to = root.join(new_name);
 
@@ -572,6 +609,9 @@ impl SyncHandler {
         entries: &[crate::rpc::QuickSendEntry],
     ) -> Result<u64, Error> {
         let dest_root = PathBuf::from(destination_dir);
+        if dest_root.to_string_lossy().contains("..") {
+            return Err(Error::Session("path traversal in destination_dir".to_owned()));
+        }
         if !dest_root.exists() {
             fs::create_dir_all(&dest_root)
                 .map_err(|e| Error::Session(format!("create dest dir: {e}")))?;
@@ -583,6 +623,10 @@ impl SyncHandler {
         let mut files_written: u64 = 0;
 
         for entry in entries {
+            if !entry.rel_path.is_safe() {
+                warn!("quick_send: rejecting unsafe path: {}", entry.rel_path.display());
+                continue;
+            }
             let dest_path = dest_root.join(entry.rel_path.to_path_buf());
 
             if entry.is_dir {

@@ -25,33 +25,24 @@ Prepare the application for real-world testing. After M7, the application will:
 
 ### Phase 1: Real sync integration
 **Priority:** Critical (blockers for testing)  
-**Status:** BLOCKED — ADR-0019 Db architecture needs resolution before proceeding
+**Status:** COMPLETE
 
 Replace stub implementations with real backend calls:
-1. **Sync progress events** — ❌ BLOCKED by async Db access issue (see ADR-0019)
-2. **Drift reporting** — ✅ COMPLETE (shows files tracked, pending changes needs filesystem scan)
-3. **Profile conflict display** — ⏸️  DEFERRED (depends on #1)
-4. **Deletion prompts** — ⏸️  DEFERRED (depends on #1)
-
-**Blocker:** ADR-0019 documents the core issue (Tauri async + Db access) and three solutions:
-1. Arc<Mutex<Connection>> — requires updating ~30 methods across 5 files  
-2. Connection pool (r2d2) — more invasive  
-3. Pre-load data before async — limits mid-sync Db access
-
-**Decision:** Phase 1 remains blocked pending architectural choice. Recommend completing Phases 2-4 first (they don't require real sync), then circle back to Phase 1 with fresh context.
+1. **Sync progress events** — ✅ COMPLETE (ADR-0019 resolved via Arc<Mutex<Connection>>; real sync wired via sync_executor)
+2. **Drift reporting** — ✅ COMPLETE (shows files tracked via SQL aggregate)
+3. **Profile conflict display** — ✅ COMPLETE (ConflictNotice component wired to `profile:conflict-resolved` event)
+4. **Deletion prompts** — ✅ COMPLETE (DeletionPrompt wired in App.tsx, triggers on pending_deletion flag)
+5. **Network startup** — ✅ COMPLETE (ADR-0020: pairing listener + mDNS auto-start on launch)
 
 ### Phase 2: Review & refactor
 **Priority:** High (quality gates before testing)  
-**Status:** MOSTLY COMPLETE — simplify and CI done
+**Status:** COMPLETE
 
 Clean up code quality issues:
-1. **Simplification** — ✅ COMPLETE (4 cleanup agents, 3 fixes applied)
-   - Extracted UUID parsing helper (eliminated 12 instances of duplication)
-   - Added efficient SQL aggregate for drift calculation (replaced O(n) loop)
-   - Cleaned up dual doc comments in start_sync
-2. **Error handling** — ⏸️  DEFERRED (manual audit)
-3. **Security review** — ⏸️  DEFERRED (requires /security-review skill)
-4. **Clippy & formatting** — ✅ COMPLETE (all warnings fixed, fmt passes)
+1. **Simplification** — ✅ COMPLETE (UUID helper, SQL aggregate, doc cleanup)
+2. **Error handling** — ✅ COMPLETE (audit done: all commands return Result, UI shows alerts)
+3. **Security review** — ✅ COMPLETE (path traversal fix in handler.rs + RelPath::is_safe(); auto-accept pairing documented as known limitation)
+4. **Clippy & formatting** — ✅ COMPLETE (zero warnings)
 
 ### Phase 3: Basic testing
 **Priority:** High (confidence for real-world testing)  

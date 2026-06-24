@@ -69,6 +69,20 @@ export interface StartSyncResult {
   direction: string;
 }
 
+export interface NetworkInfo {
+  listen_address: string;
+  listen_port: number;
+  fingerprint: string;
+  hostname: string;
+}
+
+export interface DiscoveredPeer {
+  id: string;
+  name: string;
+  addresses: string[];
+  fingerprint_short: string;
+}
+
 export interface SyncProgressEvent {
   profile_id: string;
   status: string;
@@ -116,4 +130,6 @@ export const commands = {
   getSyncStatus: (profileId: string) => invoke<SyncStatus>("get_sync_status", { profileId }),
   getDriftSummary: (profileId: string) => invoke<DriftSummary>("get_drift_summary", { profileId }),
   startSync: (profileId: string, direction: string) => invoke<StartSyncResult>("start_sync", { profileId, direction }),
+  getNetworkInfo: () => invoke<NetworkInfo>("get_network_info"),
+  listDiscoveredPeers: () => invoke<DiscoveredPeer[]>("list_discovered_peers"),
 };

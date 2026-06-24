@@ -28,6 +28,36 @@ impl RelPath {
         }
     }
 
+    /// Returns true if this relative path is safe (no traversal components).
+    /// A safe path has no `..` segments and is not absolute.
+    pub fn is_safe(&self) -> bool {
+        !self.display.starts_with('/')
+            && !self.display.contains("../")
+            && !self.display.ends_with("..")
+            && self.display != ".."
+    }
+
+    /// Join this path onto a root directory, returning None if the result
+    /// would escape the root (path traversal attack).
+    pub fn safe_resolve(&self, root: &Path) -> Option<PathBuf> {
+        if !self.is_safe() {
+            return None;
+        }
+        let joined = root.join(&self.display);
+        // Canonicalize both paths and verify containment.
+        // If root doesn't exist yet, use lexical check (still safe due to is_safe guard).
+        if let (Ok(canonical_root), Ok(canonical_joined)) =
+            (root.canonicalize(), joined.canonicalize())
+        {
+            if canonical_joined.starts_with(&canonical_root) {
+                return Some(canonical_joined);
+            }
+            return None;
+        }
+        // Fallback: lexical check (root may not exist in tests)
+        Some(joined)
+    }
+
     pub fn from_path(path: &Path) -> Self {
         let s = path.to_string_lossy();
         Self::new(&s)
@@ -176,5 +206,28 @@ mod tests {
     fn root_level_has_no_parent() {
         let p = RelPath::new("file.txt");
         assert!(p.parent().is_none());
+    }
+
+    #[test]
+    fn is_safe_rejects_traversal() {
+        assert!(!RelPath::new("../etc/passwd").is_safe());
+        assert!(!RelPath::new("foo/../../etc/passwd").is_safe());
+        assert!(!RelPath::new("..").is_safe());
+        assert!(!RelPath::new("/absolute/path").is_safe());
+    }
+
+    #[test]
+    fn is_safe_accepts_normal_paths() {
+        assert!(RelPath::new("file.txt").is_safe());
+        assert!(RelPath::new("dir/subdir/file.txt").is_safe());
+        assert!(RelPath::new(".hidden/file").is_safe());
+        assert!(RelPath::new("a...b/c").is_safe());
+    }
+
+    #[test]
+    fn safe_resolve_rejects_escape() {
+        let root = Path::new("/tmp/anchor");
+        assert!(RelPath::new("../escape").safe_resolve(root).is_none());
+        assert!(RelPath::new("foo/../../escape").safe_resolve(root).is_none());
     }
 }

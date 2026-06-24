@@ -1,29 +1,26 @@
 import { useStore } from "../store";
 
+const tabs = [
+  { id: "profiles" as const, label: "Profiles" },
+  { id: "peers" as const, label: "Peers" },
+  { id: "activity" as const, label: "Activity" },
+];
+
 export function TabBar() {
   const { activeTab, setActiveTab } = useStore();
 
-  const tabs = [
-    { id: "profiles" as const, label: "Profiles" },
-    { id: "peers" as const, label: "Peers" },
-    { id: "activity" as const, label: "Activity" },
-  ];
-
   return (
-    <div className="border-b border-gray-200">
-      <nav className="flex space-x-8 px-6" aria-label="Tabs">
+    <div className="px-6 pt-4">
+      <nav className="flex gap-1 glass-card p-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`
-              py-4 px-1 border-b-2 font-medium text-sm
-              ${
-                activeTab === tab.id
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }
-            `}
+            className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+              activeTab === tab.id
+                ? "bg-white/15 text-white shadow-sm"
+                : "text-gray-400 hover:text-white hover:bg-white/5"
+            }`}
           >
             {tab.label}
           </button>

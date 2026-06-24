@@ -1,6 +1,6 @@
 use crate::views::{
-    AnchorView, DriftSummary, PairingConfirmation, PeerView, ProfileDetail, ProfileInput,
-    ProfileView, StartSyncResult, SyncStatus,
+    AnchorView, DiscoveredPeerView, DriftSummary, NetworkInfoView, PairingConfirmation, PeerView,
+    ProfileDetail, ProfileInput, ProfileView, StartSyncResult, SyncStatus,
 };
 use std::net::SocketAddr;
 use syncnet::identity::Identity;
@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 type DbState<'a> = State<'a, Db>;
 type IdentityState<'a> = State<'a, Identity>;
+type NetState<'a> = State<'a, crate::network::SharedNetworkState>;
 
 /// Helper to parse UUID from string with consistent error mapping
 fn parse_uuid(s: &str) -> Result<Uuid, String> {
@@ -21,7 +22,7 @@ fn parse_uuid(s: &str) -> Result<Uuid, String> {
 fn expand_tilde(path: &str) -> String {
     if path.starts_with("~/") {
         if let Ok(home) = std::env::var("HOME") {
-            return path.replacen("~", &home, 1);
+            return path.replacen('~', &home, 1);
         }
     }
     path.to_string()
@@ -458,4 +459,35 @@ pub async fn start_sync(
         profile_id: profile_uuid.to_string(),
         direction,
     })
+}
+
+/// Get network info (listening address, identity fingerprint)
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn get_network_info(net: NetState<'_>) -> Result<NetworkInfoView, String> {
+    match net.get_info().await {
+        Some((addr, fingerprint, hostname)) => Ok(NetworkInfoView {
+            listen_address: addr.to_string(),
+            listen_port: addr.port(),
+            fingerprint,
+            hostname,
+        }),
+        None => Err("Network not yet initialized".to_string()),
+    }
+}
+
+/// List peers discovered via mDNS
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn list_discovered_peers(net: NetState<'_>) -> Result<Vec<DiscoveredPeerView>, String> {
+    let discovered = net.discovered_peers().await;
+    Ok(discovered
+        .into_iter()
+        .map(|p| DiscoveredPeerView {
+            id: p.id.to_string(),
+            name: p.name,
+            addresses: p.addrs.iter().map(ToString::to_string).collect(),
+            fingerprint_short: p.fingerprint_short,
+        })
+        .collect())
 }
