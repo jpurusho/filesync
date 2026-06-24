@@ -429,7 +429,9 @@ pub async fn start_sync(
 
     // Spawn the sync operation
     tokio::spawn(async move {
-        match sync_executor::execute_sync(profile_uuid, addr, mode, &identity_clone, &db_clone).await {
+        match sync_executor::execute_sync(profile_uuid, addr, mode, &identity_clone, &db_clone)
+            .await
+        {
             Ok(result) => {
                 let _ = app_handle.emit(
                     "sync:complete",

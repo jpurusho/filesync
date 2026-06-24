@@ -228,6 +228,10 @@ mod tests {
     fn safe_resolve_rejects_escape() {
         let root = Path::new("/tmp/anchor");
         assert!(RelPath::new("../escape").safe_resolve(root).is_none());
-        assert!(RelPath::new("foo/../../escape").safe_resolve(root).is_none());
+        assert!(
+            RelPath::new("foo/../../escape")
+                .safe_resolve(root)
+                .is_none()
+        );
     }
 }

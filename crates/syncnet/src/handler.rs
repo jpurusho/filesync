@@ -39,7 +39,6 @@ fn validate_rel_path(path: &RelPath) -> Result<(), RpcResponse> {
     Ok(())
 }
 
-
 pub struct SyncHandler {
     peer_id: Uuid,
     instance_id: Uuid,
@@ -516,7 +515,11 @@ impl SyncHandler {
                 message: format!("path traversal rejected: {}", path.display()),
             };
         }
-        if new_name.contains("../") || new_name.starts_with('/') || new_name.ends_with("..") || new_name == ".." {
+        if new_name.contains("../")
+            || new_name.starts_with('/')
+            || new_name.ends_with("..")
+            || new_name == ".."
+        {
             return RpcResponse::Error {
                 code: ErrorCode::AccessDenied,
                 message: format!("path traversal rejected: {new_name}"),
@@ -610,7 +613,9 @@ impl SyncHandler {
     ) -> Result<u64, Error> {
         let dest_root = PathBuf::from(destination_dir);
         if dest_root.to_string_lossy().contains("..") {
-            return Err(Error::Session("path traversal in destination_dir".to_owned()));
+            return Err(Error::Session(
+                "path traversal in destination_dir".to_owned(),
+            ));
         }
         if !dest_root.exists() {
             fs::create_dir_all(&dest_root)
@@ -624,7 +629,10 @@ impl SyncHandler {
 
         for entry in entries {
             if !entry.rel_path.is_safe() {
-                warn!("quick_send: rejecting unsafe path: {}", entry.rel_path.display());
+                warn!(
+                    "quick_send: rejecting unsafe path: {}",
+                    entry.rel_path.display()
+                );
                 continue;
             }
             let dest_path = dest_root.join(entry.rel_path.to_path_buf());

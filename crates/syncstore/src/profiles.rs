@@ -251,7 +251,8 @@ impl Db {
     /// List undelivered tombstones.
     pub fn list_undelivered_tombstones(&self) -> Result<Vec<(Uuid, String)>> {
         let conn = self.conn();
-        let mut stmt = conn.prepare("SELECT profile_id, deleted_at FROM profile_tombstones WHERE delivered = 0")?;
+        let mut stmt = conn
+            .prepare("SELECT profile_id, deleted_at FROM profile_tombstones WHERE delivered = 0")?;
 
         let rows = stmt.query_map([], |row| {
             let id_str: String = row.get(0)?;
