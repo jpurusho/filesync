@@ -25,8 +25,6 @@ pub enum SyncError {
     ProfileNotFound(Uuid),
     #[error("Peer not found for profile: {0}")]
     PeerNotFound(String),
-    #[error("Invalid peer address: {0}")]
-    InvalidAddress(String),
     #[error("Network error: {0}")]
     Network(String),
     #[error("TLS error: {0}")]

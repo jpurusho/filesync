@@ -26,8 +26,13 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install dependencies
+        working-directory: ui
+        run: pnpm install
+
       - name: Build release
-        run: make build
+        working-directory: ui
+        run: pnpm tauri build
 
       - name: Create latest.json
         run: |
