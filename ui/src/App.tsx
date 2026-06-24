@@ -7,6 +7,7 @@ import { PeersPage } from "./pages/PeersPage";
 import { ActivityPage } from "./pages/ActivityPage";
 import { DeletionPrompt } from "./components/DeletionPrompt";
 import { ConflictNotice } from "./components/ConflictNotice";
+import { UpdateInstructions } from "./components/UpdateInstructions";
 import { checkForUpdates, installUpdate } from "./lib/tauri";
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [showUpdateInstructions, setShowUpdateInstructions] = useState(false);
 
   useEffect(() => {
     fetchPendingDeletions();
@@ -63,10 +65,12 @@ function App() {
     setInstalling(true);
     try {
       await installUpdate();
-      alert("Update installed! Please restart the app.");
+      setUpdateAvailable(false);
+      setInstalling(false);
+      // Show instructions modal instead of alert
+      setShowUpdateInstructions(true);
     } catch (error) {
       alert(`Failed to install update: ${error}`);
-    } finally {
       setInstalling(false);
     }
   };
@@ -125,6 +129,12 @@ function App() {
         <ConflictNotice
           profileName={conflictNotice}
           onClose={() => setConflictNotice(null)}
+        />
+      )}
+
+      {showUpdateInstructions && (
+        <UpdateInstructions
+          onClose={() => setShowUpdateInstructions(false)}
         />
       )}
     </div>
