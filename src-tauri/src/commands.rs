@@ -427,10 +427,34 @@ pub async fn start_sync(
     let db_clone = db.inner().clone();
     let identity_clone = identity.inner().clone();
 
+    // Create progress callback that emits Tauri events
+    let app_handle_clone = app_handle.clone();
+    let progress_callback: syncnet::session::ProgressCallback = Box::new(move |progress| {
+        let _ = app_handle_clone.emit(
+            "sync:progress",
+            serde_json::json!({
+                "profile_id": progress.profile_id.to_string(),
+                "run_id": progress.run_id.to_string(),
+                "current_file": progress.current_file,
+                "files_completed": progress.files_completed,
+                "files_total": progress.files_total,
+                "bytes_transferred": progress.bytes_transferred,
+                "bytes_total": progress.bytes_total,
+            }),
+        );
+    });
+
     // Spawn the sync operation
     tokio::spawn(async move {
-        match sync_executor::execute_sync(profile_uuid, addr, mode, &identity_clone, &db_clone)
-            .await
+        match sync_executor::execute_sync(
+            profile_uuid,
+            addr,
+            mode,
+            &identity_clone,
+            &db_clone,
+            Some(&progress_callback),
+        )
+        .await
         {
             Ok(result) => {
                 let _ = app_handle.emit(
@@ -438,7 +462,7 @@ pub async fn start_sync(
                     serde_json::json!({
                         "run_id": run_id.to_string(),
                         "profile_id": profile_uuid.to_string(),
-                        "files_synced": result.files_transferred,
+                        "files_transferred": result.files_transferred,
                         "bytes_transferred": result.bytes_transferred,
                     }),
                 );

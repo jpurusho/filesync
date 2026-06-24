@@ -23,6 +23,21 @@ use syncstore::profiles::{AnchorRow, ProfileRow};
 
 const FILE_CHUNK_SIZE: usize = 256 * 1024; // 256 KiB
 
+/// Progress update during sync
+#[derive(Debug, Clone)]
+pub struct SyncProgress {
+    pub profile_id: Uuid,
+    pub run_id: Uuid,
+    pub current_file: Option<String>,
+    pub files_completed: u64,
+    pub files_total: u64,
+    pub bytes_transferred: u64,
+    pub bytes_total: u64,
+}
+
+/// Callback for progress updates during sync
+pub type ProgressCallback = Box<dyn Fn(SyncProgress) + Send + Sync>;
+
 pub struct RemoteSyncConfig {
     pub profile_id: Uuid,
     pub mode: SyncMode,
@@ -56,6 +71,7 @@ pub async fn run_remote_push<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut FramedStream<S>,
     config: &RemoteSyncConfig,
     index: &SyncIndex,
+    progress_cb: Option<&ProgressCallback>,
 ) -> Result<RemoteSyncResult, Error> {
     let run_id = Uuid::new_v4();
     let mut req_id: u32 = 0;
@@ -132,9 +148,40 @@ pub async fn run_remote_push<S: AsyncRead + AsyncWrite + Unpin>(
         plan::dedup_dirs(&mut sync_plan);
         plan::order_actions(&mut sync_plan);
 
+        // Count total files to transfer
+        let total_files = sync_plan.actions.iter().filter(|a| matches!(a, Action::CopyFile { .. })).count() as u64;
+        let total_bytes = sync_plan.actions.iter()
+            .filter_map(|a| {
+                if let Action::CopyFile { from: Side::Local, path } = a {
+                    let full_path = anchor.local_path.join(path.to_path_buf());
+                    std::fs::metadata(&full_path).ok().map(|m| m.len())
+                } else {
+                    None
+                }
+            })
+            .sum::<u64>();
+
         // 5. Execute plan over RPC
         let mut executed: Vec<&Action> = Vec::new();
         for action in &sync_plan.actions {
+            // Report progress before action
+            if let Some(cb) = progress_cb {
+                let current_file = if let Action::CopyFile { path, .. } = action {
+                    Some(path.display().to_string())
+                } else {
+                    None
+                };
+                cb(SyncProgress {
+                    profile_id: config.profile_id,
+                    run_id,
+                    current_file,
+                    files_completed: files_transferred,
+                    files_total: total_files,
+                    bytes_transferred,
+                    bytes_total: total_bytes,
+                });
+            }
+
             let result =
                 execute_push_action(stream, action, anchor.id, &anchor.local_path, &mut req_id)
                     .await;
@@ -185,6 +232,7 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut FramedStream<S>,
     config: &RemoteSyncConfig,
     index: &SyncIndex,
+    progress_cb: Option<&ProgressCallback>,
 ) -> Result<RemoteSyncResult, Error> {
     let run_id = Uuid::new_v4();
     let mut req_id: u32 = 0;
@@ -273,6 +321,9 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
             })
             .collect();
 
+        let total_files = paths_to_pull.len() as u64;
+        let total_bytes = 0u64; // Remote sizes not yet known; approximate in progress
+
         let mut executed: Vec<&Action> = Vec::new();
 
         // Create dirs locally
@@ -329,6 +380,19 @@ pub async fn run_remote_pull<S: AsyncRead + AsyncWrite + Unpin>(
 
             // Receive file data frames
             for path in &paths_to_pull {
+                // Report progress before file
+                if let Some(cb) = progress_cb {
+                    cb(SyncProgress {
+                        profile_id: config.profile_id,
+                        run_id,
+                        current_file: Some(path.display().to_string()),
+                        files_completed: files_transferred,
+                        files_total: total_files,
+                        bytes_transferred,
+                        bytes_total: total_bytes,
+                    });
+                }
+
                 match receive_file(stream, &anchor.local_path, path).await {
                     Ok(size) => {
                         files_transferred += 1;
@@ -705,6 +769,7 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut FramedStream<S>,
     config: &RemoteSyncConfig,
     index: &SyncIndex,
+    progress_cb: Option<&ProgressCallback>,
 ) -> Result<RemoteSyncResult, Error> {
     let run_id = Uuid::new_v4();
     let mut req_id: u32 = 0;
@@ -780,11 +845,32 @@ pub async fn run_remote_bidi<S: AsyncRead + AsyncWrite + Unpin>(
         plan::dedup_dirs(&mut sync_plan);
         plan::order_actions(&mut sync_plan);
 
+        // Count total files to transfer
+        let total_files = sync_plan.actions.iter().filter(|a| matches!(a, Action::CopyFile { .. })).count() as u64;
+        let total_bytes = 0u64; // Mixed directions make this complex; approximate in progress
+
         // 5. Execute the plan — mixed push/pull/local actions
         let mut executed: Vec<&Action> = Vec::new();
         let mut paths_to_pull: Vec<RelPath> = Vec::new();
 
         for action in &sync_plan.actions {
+            // Report progress before action
+            if let Some(cb) = progress_cb {
+                let current_file = if let Action::CopyFile { path, .. } = action {
+                    Some(path.display().to_string())
+                } else {
+                    None
+                };
+                cb(SyncProgress {
+                    profile_id: config.profile_id,
+                    run_id,
+                    current_file,
+                    files_completed: files_transferred,
+                    files_total: total_files,
+                    bytes_transferred,
+                    bytes_total: total_bytes,
+                });
+            }
             match action {
                 // --- Remote-side actions ---
                 Action::CreateDir {

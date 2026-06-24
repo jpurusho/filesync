@@ -12,8 +12,8 @@ use synccore::reconcile::{ConflictPolicy, SyncMode};
 use synccore::scan::{EntryKind, ScanConfig};
 use syncnet::identity::Identity;
 use syncnet::session::{
-    RemoteAnchor, RemoteSyncConfig, RemoteSyncResult, run_remote_bidi, run_remote_pull,
-    run_remote_push,
+    ProgressCallback, RemoteAnchor, RemoteSyncConfig, RemoteSyncResult, run_remote_bidi,
+    run_remote_pull, run_remote_push,
 };
 use syncnet::tls;
 use syncnet::transport::framed;
@@ -54,6 +54,7 @@ pub async fn execute_sync(
     mode: SyncMode,
     identity: &Identity,
     db: &Db,
+    progress_cb: Option<&ProgressCallback>,
 ) -> Result<RemoteSyncResult, SyncError> {
     // 1. Load profile and anchors
     let profile = db
@@ -131,9 +132,9 @@ pub async fn execute_sync(
 
     // 6. Run sync based on mode
     let result = match mode {
-        SyncMode::Push => run_remote_push(&mut stream, &config, &index).await?,
-        SyncMode::Pull => run_remote_pull(&mut stream, &config, &index).await?,
-        SyncMode::Bidirectional => run_remote_bidi(&mut stream, &config, &index).await?,
+        SyncMode::Push => run_remote_push(&mut stream, &config, &index, progress_cb).await?,
+        SyncMode::Pull => run_remote_pull(&mut stream, &config, &index, progress_cb).await?,
+        SyncMode::Bidirectional => run_remote_bidi(&mut stream, &config, &index, progress_cb).await?,
     };
 
     // 7. Persist updated index

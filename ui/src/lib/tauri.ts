@@ -85,8 +85,12 @@ export interface DiscoveredPeer {
 
 export interface SyncProgressEvent {
   profile_id: string;
-  status: string;
-  progress: number;
+  run_id: string;
+  current_file: string | null;
+  files_completed: number;
+  files_total: number;
+  bytes_transferred: number;
+  bytes_total: number;
 }
 
 export interface SyncCompleteEvent {

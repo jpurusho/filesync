@@ -9,9 +9,11 @@ interface SyncRun {
   profileName: string;
   direction: string;
   status: "running" | "complete" | "error";
-  progress: number;
-  filesTransferred?: number;
-  bytesTransferred?: number;
+  currentFile?: string;
+  filesCompleted: number;
+  filesTotal: number;
+  bytesTransferred: number;
+  bytesTotal: number;
   errorMessage?: string;
   startedAt: Date;
   completedAt?: Date;
@@ -41,11 +43,18 @@ export function ActivityPage() {
     fetchDiscovered();
     const interval = setInterval(fetchDiscovered, 5000); // Refresh every 5 seconds
 
-    const unlistenProgress = listen<SyncProgressEvent>("sync-progress", (event) => {
+    const unlistenProgress = listen<SyncProgressEvent>("sync:progress", (event) => {
       setRuns((prev) =>
         prev.map((run) =>
-          run.profileId === event.payload.profile_id && run.status === "running"
-            ? { ...run, progress: event.payload.progress, status: "running" }
+          run.runId === event.payload.run_id && run.status === "running"
+            ? {
+                ...run,
+                currentFile: event.payload.current_file || undefined,
+                filesCompleted: event.payload.files_completed,
+                filesTotal: event.payload.files_total,
+                bytesTransferred: event.payload.bytes_transferred,
+                bytesTotal: event.payload.bytes_total,
+              }
             : run
         )
       );
@@ -54,12 +63,11 @@ export function ActivityPage() {
     const unlistenComplete = listen<SyncCompleteEvent>("sync:complete", (event) => {
       setRuns((prev) =>
         prev.map((run) =>
-          run.profileId === event.payload.profile_id && run.status === "running"
+          run.runId === event.payload.run_id && run.status === "running"
             ? {
                 ...run,
                 status: "complete",
-                progress: 1.0,
-                filesTransferred: event.payload.files_transferred,
+                filesCompleted: event.payload.files_transferred,
                 bytesTransferred: event.payload.bytes_transferred,
                 completedAt: new Date(),
               }
@@ -68,12 +76,12 @@ export function ActivityPage() {
       );
     });
 
-    const unlistenError = listen<{ profile_id: string; error: string }>(
+    const unlistenError = listen<{ run_id: string; profile_id: string; error: string }>(
       "sync:error",
       (event) => {
         setRuns((prev) =>
           prev.map((run) =>
-            run.profileId === event.payload.profile_id && run.status === "running"
+            run.runId === event.payload.run_id && run.status === "running"
               ? {
                   ...run,
                   status: "error",
@@ -134,7 +142,10 @@ export function ActivityPage() {
           profileName: profile?.name || "Unknown",
           direction: result.direction,
           status: "running",
-          progress: 0,
+          filesCompleted: 0,
+          filesTotal: 0,
+          bytesTransferred: 0,
+          bytesTotal: 0,
           startedAt: new Date(),
         },
         ...prev,
@@ -253,21 +264,37 @@ export function ActivityPage() {
                   </span>
                 </div>
                 {run.status === "running" && (
-                  <div className="mt-2">
+                  <div className="mt-3 space-y-2">
+                    {run.currentFile && (
+                      <p className="text-xs text-blue-300 truncate">
+                        📄 {run.currentFile}
+                      </p>
+                    )}
                     <div className="w-full bg-white/5 rounded-full h-2">
                       <div
                         className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
-                        style={{ width: `${run.progress * 100}%` }}
+                        style={{
+                          width: run.filesTotal > 0
+                            ? `${(run.filesCompleted / run.filesTotal) * 100}%`
+                            : "0%",
+                        }}
                       />
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {Math.round(run.progress * 100)}%
-                    </p>
+                    <div className="flex justify-between text-xs text-gray-400">
+                      <span>
+                        {run.filesCompleted} / {run.filesTotal} files
+                      </span>
+                      <span>
+                        {(run.bytesTransferred / 1024 / 1024).toFixed(1)} MB
+                        {run.bytesTotal > 0 &&
+                          ` / ${(run.bytesTotal / 1024 / 1024).toFixed(1)} MB`}
+                      </span>
+                    </div>
                   </div>
                 )}
                 {run.status === "complete" && (
                   <div className="mt-2 text-sm text-gray-400">
-                    {run.filesTransferred} files · {((run.bytesTransferred || 0) / 1024).toFixed(1)} KB
+                    ✓ {run.filesCompleted} files · {(run.bytesTransferred / 1024 / 1024).toFixed(1)} MB
                   </div>
                 )}
                 {run.status === "error" && run.errorMessage && (
