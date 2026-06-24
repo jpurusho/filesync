@@ -181,11 +181,12 @@ If a peer deletes a profile:
 
 ### In Progress (M7 — MVP Readiness)
 
-- Integration testing and bug fixes
-- Network services auto-start on launch (ADR-0020)
-- Security hardening: path traversal protection (ADR-0021)
-- Auto-updater for seamless version distribution (ADR-0022)
-- Build automation with Makefile (ADR-0023)
+- ✅ Network services auto-start on launch (ADR-0020)
+- ✅ Security hardening: path traversal protection (ADR-0021)
+- ✅ Auto-updater for seamless version distribution (ADR-0022)
+- ✅ Build automation with Makefile (ADR-0023)
+- ✅ Sync integration unblocked: Arc-wrapped Db (ADR-0024)
+- Integration testing and end-to-end validation
 
 ## Current Status & Known Limitations
 
@@ -198,6 +199,7 @@ If a peer deletes a profile:
 - ✅ **Auto-updates** via Tauri updater (GitHub releases)
 - ✅ **Dark theme** UI with modern React components
 - ✅ **Path traversal protection** for secure file operations
+- ✅ **Real sync integration** — Sync button triggers actual file transfers (ADR-0019 resolved via ADR-0024)
 
 ### Known Limitations (MVP)
 
@@ -205,11 +207,6 @@ If a peer deletes a profile:
 - **Two peers only** — No multi-peer topologies (>2 nodes)
 - **No delta sync** — Whole files transferred (chunk/block-level deferred)
 - **No auto-trigger** — Manual sync only (filesystem watch deferred)
-- ⚠️ **Real sync integration blocked** — See ADR-0019 (async Db access issue)
-  - Sync button currently stubbed in UI (returns immediately without transferring files)
-  - Three solutions documented: Arc-wrapped Db (recommended), connection pool, or pre-load data
-  - See `docs/decisions/0019-tauri-sync-integration-blocker.md` for details
-  - Core sync engine and network layer are fully functional and tested
 
 ## Testing Status
 
