@@ -120,6 +120,7 @@ export interface AnchorInput {
 
 // Command wrappers
 export const commands = {
+  getAppVersion: () => invoke<string>("get_app_version"),
   listProfiles: () => invoke<ProfileView[]>("list_profiles"),
   getProfile: (id: string) => invoke<ProfileDetail>("get_profile", { id }),
   createProfile: (input: ProfileInput) => invoke<ProfileView>("create_profile", { input }),
@@ -134,6 +135,7 @@ export const commands = {
   getSyncStatus: (profileId: string) => invoke<SyncStatus>("get_sync_status", { profileId }),
   getDriftSummary: (profileId: string) => invoke<DriftSummary>("get_drift_summary", { profileId }),
   startSync: (profileId: string, peerAddress: string, direction: string) => invoke<StartSyncResult>("start_sync", { profileId, peerAddress, direction }),
+  cancelSync: (runId: string) => invoke<boolean>("cancel_sync", { runId }),
   getNetworkInfo: () => invoke<NetworkInfo>("get_network_info"),
   listDiscoveredPeers: () => invoke<DiscoveredPeer[]>("list_discovered_peers"),
 };

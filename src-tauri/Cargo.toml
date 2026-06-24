@@ -29,6 +29,7 @@ syncnet = { path = "../crates/syncnet" }
 tokio.workspace = true
 rustls.workspace = true
 tokio-rustls.workspace = true
+tokio-util = "0.7"
 thiserror.workspace = true
 hostname.workspace = true
 get_if_addrs.workspace = true

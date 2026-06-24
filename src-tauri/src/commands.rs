@@ -12,6 +12,13 @@ use uuid::Uuid;
 type DbState<'a> = State<'a, Db>;
 type IdentityState<'a> = State<'a, Identity>;
 type NetState<'a> = State<'a, crate::network::SharedNetworkState>;
+type TrackerState<'a> = State<'a, crate::sync_tracker::SyncTracker>;
+
+/// Get application version from Cargo.toml
+#[tauri::command]
+pub fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
 
 /// Helper to parse UUID from string with consistent error mapping
 fn parse_uuid(s: &str) -> Result<Uuid, String> {
@@ -402,6 +409,7 @@ pub async fn start_sync(
     direction: String, // "push" | "pull" | "bidi"
     db: DbState<'_>,
     identity: IdentityState<'_>,
+    tracker: TrackerState<'_>,
     app_handle: tauri::AppHandle,
 ) -> Result<StartSyncResult, String> {
     use crate::sync_executor;
@@ -427,6 +435,10 @@ pub async fn start_sync(
     let db_clone = db.inner().clone();
     let identity_clone = identity.inner().clone();
 
+    // Register this sync run and get cancellation token
+    let cancel_token = tracker.register(run_id).await;
+    let tracker_clone = tracker.inner().clone();
+
     // Create progress callback that emits Tauri events
     let app_handle_clone = app_handle.clone();
     let progress_callback: syncnet::session::ProgressCallback = Box::new(move |progress| {
@@ -446,38 +458,57 @@ pub async fn start_sync(
 
     // Spawn the sync operation
     tokio::spawn(async move {
-        match sync_executor::execute_sync(
+        // Check for cancellation periodically during sync
+        let sync_future = sync_executor::execute_sync(
             profile_uuid,
             addr,
             mode,
             &identity_clone,
             &db_clone,
             Some(&progress_callback),
-        )
-        .await
-        {
-            Ok(result) => {
-                let _ = app_handle.emit(
-                    "sync:complete",
-                    serde_json::json!({
-                        "run_id": run_id.to_string(),
-                        "profile_id": profile_uuid.to_string(),
-                        "files_transferred": result.files_transferred,
-                        "bytes_transferred": result.bytes_transferred,
-                    }),
-                );
+        );
+
+        // Race between sync completion and cancellation
+        tokio::select! {
+            result = sync_future => {
+                match result {
+                    Ok(result) => {
+                        let _ = app_handle.emit(
+                            "sync:complete",
+                            serde_json::json!({
+                                "run_id": run_id.to_string(),
+                                "profile_id": profile_uuid.to_string(),
+                                "files_transferred": result.files_transferred,
+                                "bytes_transferred": result.bytes_transferred,
+                            }),
+                        );
+                    }
+                    Err(e) => {
+                        let _ = app_handle.emit(
+                            "sync:error",
+                            serde_json::json!({
+                                "run_id": run_id.to_string(),
+                                "profile_id": profile_uuid.to_string(),
+                                "error": e.to_string(),
+                            }),
+                        );
+                    }
+                }
             }
-            Err(e) => {
+            _ = cancel_token.cancelled() => {
+                // Cancellation requested
                 let _ = app_handle.emit(
-                    "sync:error",
+                    "sync:cancelled",
                     serde_json::json!({
                         "run_id": run_id.to_string(),
                         "profile_id": profile_uuid.to_string(),
-                        "error": e.to_string(),
                     }),
                 );
             }
         }
+
+        // Unregister the run
+        tracker_clone.unregister(run_id).await;
     });
 
     Ok(StartSyncResult {
@@ -485,6 +516,14 @@ pub async fn start_sync(
         profile_id: profile_uuid.to_string(),
         direction,
     })
+}
+
+/// Cancel an active sync operation
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn cancel_sync(run_id: String, tracker: TrackerState<'_>) -> Result<bool, String> {
+    let uuid = parse_uuid(&run_id)?;
+    Ok(tracker.cancel(uuid).await)
 }
 
 /// Get network info (listening address, identity fingerprint)

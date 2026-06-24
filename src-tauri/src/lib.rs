@@ -1,9 +1,11 @@
 mod commands;
 pub mod network;
 mod sync_executor;
+mod sync_tracker;
 mod views;
 
 use network::SharedNetworkState;
+use sync_tracker::SyncTracker;
 use syncnet::identity::Identity;
 use syncstore::Db;
 use tauri::Manager;
@@ -32,6 +34,9 @@ pub fn run() {
     // Create shared network state (filled async during setup)
     let shared_net = SharedNetworkState::new();
 
+    // Create sync tracker for cancellation support
+    let sync_tracker = SyncTracker::new();
+
     // Clone for async setup closure
     let identity_for_net = identity.clone();
     let db_for_net = db.clone();
@@ -42,6 +47,7 @@ pub fn run() {
         .manage(db)
         .manage(identity)
         .manage(shared_net)
+        .manage(sync_tracker)
         .setup(move |app| {
             let net_state: SharedNetworkState = app.state::<SharedNetworkState>().inner().clone();
             tauri::async_runtime::spawn(async move {
@@ -62,6 +68,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ping,
+            commands::get_app_version,
             commands::list_profiles,
             commands::get_profile,
             commands::create_profile,
@@ -71,6 +78,7 @@ pub fn run() {
             commands::pair_peer,
             commands::unpair_peer,
             commands::start_sync,
+            commands::cancel_sync,
             commands::list_pending_deletions,
             commands::confirm_deletion,
             commands::reject_deletion,

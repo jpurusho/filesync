@@ -8,7 +8,7 @@ interface SyncRun {
   profileId: string;
   profileName: string;
   direction: string;
-  status: "running" | "complete" | "error";
+  status: "running" | "complete" | "error" | "cancelled";
   currentFile?: string;
   filesCompleted: number;
   filesTotal: number;
@@ -94,13 +94,39 @@ export function ActivityPage() {
       }
     );
 
+    const unlistenCancelled = listen<{ run_id: string; profile_id: string }>(
+      "sync:cancelled",
+      (event) => {
+        setRuns((prev) =>
+          prev.map((run) =>
+            run.runId === event.payload.run_id && run.status === "running"
+              ? {
+                  ...run,
+                  status: "cancelled",
+                  completedAt: new Date(),
+                }
+              : run
+          )
+        );
+      }
+    );
+
     return () => {
       unlistenProgress.then((fn) => fn());
       unlistenComplete.then((fn) => fn());
       unlistenError.then((fn) => fn());
+      unlistenCancelled.then((fn) => fn());
       clearInterval(interval);
     };
   }, [fetchProfiles, fetchPeers]);
+
+  const handleCancel = async (runId: string) => {
+    try {
+      await commands.cancelSync(runId);
+    } catch (error) {
+      console.error("Failed to cancel sync:", error);
+    }
+  };
 
   const handleSync = async (direction: "push" | "pull" | "bidi") => {
     if (!selectedProfile) {
@@ -251,17 +277,30 @@ export function ActivityPage() {
                       {run.direction.toUpperCase()} · {run.startedAt.toLocaleTimeString()}
                     </p>
                   </div>
-                  <span
-                    className={`px-2 py-1 text-xs font-medium rounded ${
-                      run.status === "running"
-                        ? "bg-blue-500/20 text-blue-300"
-                        : run.status === "complete"
-                        ? "bg-green-500/20 text-green-300"
-                        : "bg-red-500/20 text-red-300"
-                    }`}
-                  >
-                    {run.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2 py-1 text-xs font-medium rounded ${
+                        run.status === "running"
+                          ? "bg-blue-500/20 text-blue-300"
+                          : run.status === "complete"
+                          ? "bg-green-500/20 text-green-300"
+                          : run.status === "cancelled"
+                          ? "bg-gray-500/20 text-gray-300"
+                          : "bg-red-500/20 text-red-300"
+                      }`}
+                    >
+                      {run.status}
+                    </span>
+                    {run.status === "running" && (
+                      <button
+                        onClick={() => handleCancel(run.runId)}
+                        className="px-2 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded transition-colors"
+                        title="Cancel sync"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {run.status === "running" && (
                   <div className="mt-3 space-y-2">
@@ -295,6 +334,11 @@ export function ActivityPage() {
                 {run.status === "complete" && (
                   <div className="mt-2 text-sm text-gray-400">
                     ✓ {run.filesCompleted} files · {(run.bytesTransferred / 1024 / 1024).toFixed(1)} MB
+                  </div>
+                )}
+                {run.status === "cancelled" && (
+                  <div className="mt-2 text-sm text-gray-400">
+                    Cancelled after {run.filesCompleted} files · {(run.bytesTransferred / 1024 / 1024).toFixed(1)} MB
                   </div>
                 )}
                 {run.status === "error" && run.errorMessage && (

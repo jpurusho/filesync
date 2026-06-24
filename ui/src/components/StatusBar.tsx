@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update, type DownloadEvent } from "@tauri-apps/plugin-updater";
 import { useStore } from "../store";
+import { commands } from "../lib/tauri";
 
 export function StatusBar() {
   const { profiles, peers, activeTab } = useStore();
@@ -10,7 +10,9 @@ export function StatusBar() {
   const [updateProgress, setUpdateProgress] = useState<number | null>(null);
 
   useEffect(() => {
-    getVersion().then(setAppVersion).catch(() => setAppVersion("0.0.0"));
+    commands.getAppVersion()
+      .then(setAppVersion)
+      .catch(() => setAppVersion("0.0.0"));
 
     // Check for updates (delayed)
     const timer = setTimeout(() => {
