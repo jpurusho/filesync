@@ -2,9 +2,9 @@
   "model": "sonnet",
   "permissions": {
     "allow": [
-      "Read(*)",
-      "Write(*)",
-      "Edit(*)",
+      "Read",
+      "Write",
+      "Edit",
       "Bash(ls *)",
       "Bash(pwd)",
       "Bash(git status *)",
