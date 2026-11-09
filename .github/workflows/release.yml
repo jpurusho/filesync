@@ -40,8 +40,8 @@ jobs:
         run: |
           cd target/release/bundle/macos
           zip -r FileSync.app.zip FileSync.app
-          mv FileSync.app.zip ../../../
-          cd ../../../
+          cd ../../../../
+          mv target/release/bundle/macos/FileSync.app.zip .
           ls -lh FileSync.app.zip
 
       - name: Create latest.json
