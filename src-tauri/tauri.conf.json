@@ -1,6 +1,6 @@
 {
   "productName": "FileSync",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "identifier": "com.filesync.dev",
   "build": {
     "beforeDevCommand": "pnpm -C ../ui dev",
