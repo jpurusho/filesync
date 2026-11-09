@@ -36,6 +36,14 @@ jobs:
       - name: Build release
         run: cargo tauri build
 
+      - name: Create ZIP
+        run: |
+          cd target/release/bundle/macos
+          zip -r FileSync.app.zip FileSync.app
+          mv FileSync.app.zip ../../../
+          cd ../../../
+          ls -lh FileSync.app.zip
+
       - name: Create latest.json
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
@@ -47,7 +55,7 @@ jobs:
             "platforms": {
               "darwin-aarch64": {
                 "signature": "",
-                "url": "https://github.com/${{ github.repository }}/releases/download/$VERSION/FileSync_${VERSION#v}_aarch64.dmg"
+                "url": "https://github.com/${{ github.repository }}/releases/download/$VERSION/FileSync.app.zip"
               }
             }
           }
@@ -57,7 +65,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            target/release/bundle/dmg/FileSync_*.dmg
+            FileSync.app.zip
             latest.json
           draft: false
           prerelease: false
