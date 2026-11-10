@@ -1,7 +1,19 @@
 # FileSync — P2P File Synchronization for macOS
 
-**Status:** M7 (MVP readiness) complete — ready for testing  
-**Version:** 0.3.2  
+## 🪦 PROJECT ARCHIVED - No Longer Under Development
+
+**Status:** Archived (2026-11-10)  
+**Final Version:** 0.3.8  
+**Reason:** Fundamental UX barriers (VPN blocking, discovery failures, LAN-only limitation)
+
+**👉 See [README-ARCHIVED.md](README-ARCHIVED.md) for full explanation and alternative solutions.**
+
+**We're now building:** [nextcloud-setup](https://github.com/jpurusho/nextcloud-setup) - Self-hosted Nextcloud on Mac Studio
+
+---
+
+## Original README
+
 **Platform:** macOS (MVP target)
 
 ## What This Is
