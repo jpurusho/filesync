@@ -26,8 +26,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0" --locked
+      - name: Install cargo-binstall (for faster Tauri CLI install)
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+
+      - name: Install Tauri CLI (pre-compiled binary)
+        run: cargo binstall tauri-cli --version "^2.0" --no-confirm
 
       - name: Install UI dependencies
         working-directory: ui
