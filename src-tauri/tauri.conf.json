@@ -1,6 +1,6 @@
 {
   "productName": "FileSync",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "identifier": "com.filesync.dev",
   "build": {
     "beforeDevCommand": "pnpm -C ../ui dev",
@@ -31,8 +31,10 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "entitlements": "Entitlements.plist",
-      "minimumSystemVersion": "12.0"
+      "entitlements": "./Entitlements.plist",
+      "exceptionDomain": "",
+      "minimumSystemVersion": "12.0",
+      "signingIdentity": "-"
     }
   },
   "plugins": {
